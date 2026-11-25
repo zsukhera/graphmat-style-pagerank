@@ -3,6 +3,7 @@
 #
 #   make              optimized build of every variant into bin/
 #   make debug        sanitizer build (ASan + UBSan) into bin/debug/
+#   make test         check every variant against NetworkX and serial
 #   make data         download email-Enron from SNAP into data/
 #   make data-large   download soc-LiveJournal1 (~250 MB compressed)
 #   make clean        remove bin/
@@ -22,7 +23,7 @@ SOURCES := $(wildcard $(SRC_DIR)/*.cpp)
 HEADERS := $(wildcard $(SRC_DIR)/*.h)
 TARGETS := $(patsubst $(SRC_DIR)/%.cpp,$(BIN_DIR)/%,$(SOURCES))
 
-.PHONY: all debug data data-large clean help
+.PHONY: all debug test data data-large clean help
 
 all: $(TARGETS)
 ifeq ($(strip $(SOURCES)),)
@@ -38,6 +39,10 @@ $(BIN_DIR):
 
 debug:
 	@$(MAKE) --no-print-directory all CXXFLAGS="$(DEBUGFLAGS)" BIN_DIR=bin/debug
+
+# Builds first, then runs the correctness harness on every variant.
+test: all
+	tests/run_tests.sh
 
 data: $(DATA_DIR)/email-Enron.txt
 
@@ -56,4 +61,4 @@ clean:
 	rm -rf $(BIN_DIR)
 
 help:
-	@sed -n '1,9p' Makefile | sed 's/^# \{0,1\}//'
+	@sed -n '1,10p' Makefile | sed 's/^# \{0,1\}//'

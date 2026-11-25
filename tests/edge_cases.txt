@@ -1,0 +1,21 @@
+# Edge-case test graph: the inputs most likely to break a PageRank variant
+# Nodes: 10 Edges: 13 in the file (11 after removing duplicates)
+#  - 0 -> 1 is listed three times: must count once, as in NetworkX's DiGraph
+#  - 2 -> 2 is a self-loop: kept, and counts toward 2's out-degree
+#  - 5 and 6 never appear: ids are used as-is, so they are isolated vertices
+#  - 4, 5, 6, 8 and 9 have no out-edges (dangling)
+#  - 7 -> 8, 7 -> 9 is a separate component, unreachable from the rest
+# FromNodeId	ToNodeId
+0	1
+0	1
+0	1
+1	2
+2	2
+2	0
+2	3
+3	0
+3	4
+1	4
+7	8
+7	9
+0	3

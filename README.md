@@ -99,8 +99,8 @@ Our scaling curves will be shown next to GraphMat's PageRank trend (its Fig. 5a)
 ## Roadmap
 
 - [x] Paper analysis and project proposal (Milestone 2)
-- [ ] Serial baseline: graph loader, CSR/CSC builder, SPMV PageRank
-- [ ] Correctness harness (serial and NetworkX cross-checks)
+- [x] Serial baseline: graph loader, CSR/CSC builder, SPMV PageRank
+- [x] Correctness harness (serial and NetworkX cross-checks)
 - [ ] Stage 1: OpenMP static scheduling
 - [ ] Stage 2: OpenMP dynamic scheduling with over-partitioning
 - [ ] Stage 3: SIMD inner loop
@@ -167,6 +167,7 @@ Each `src/<name>.cpp` builds into its own executable `bin/<name>`, with `src/com
 |---|---|
 | `make` | Optimized build (`-O3 -march=native -fopenmp`) of every variant into `bin/` |
 | `make debug` | AddressSanitizer + UBSan build into `bin/debug/`, for catching memory bugs |
+| `make test` | Build, then check every variant against NetworkX and the serial baseline |
 | `make data` | Download `email-Enron` into `data/` |
 | `make data-large` | Download `soc-LiveJournal1` into `data/` |
 | `make clean` | Remove `bin/` |
@@ -178,6 +179,9 @@ Each `src/<name>.cpp` builds into its own executable `bin/<name>`, with `src/com
 src/common.h        graph loader + transposed-CSR builder shared by all variants
 src/*.cpp           one PageRank variant per file → bin/<name>
 tests/tiny.txt      6-node hand-made graph (hub, cycle, source, dangling node)
+tests/edge_cases.txt duplicate edges, self-loop, isolated ids, many dangling nodes
+tests/run_tests.sh  correctness harness (run via make test)
+tests/check_ranks.py compares a ranks file to NetworkX or to another ranks file
 data/               downloaded SNAP graphs (git-ignored)
 setup.sh            first-time setup
 requirements.txt    Python packages for the correctness checks
