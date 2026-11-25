@@ -1,0 +1,91 @@
+PageRank benchmarks
+===================
+
+date:        2026-11-25 15:31:54 PKT
+commit:      e9e6a7f (+ uncommitted changes)
+cpu:         Intel(R) Core(TM) i7-10610U CPU @ 1.80GHz
+cores:       4 physical x 1 socket(s), 8 hardware threads
+kernel:      6.18.58.1-microsoft-standard-WSL2
+compiler:    g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+flags:       -std=c++17 -O3 -march=native -fopenmp
+OpenMP env:  OMP_PLACES=threads OMP_PROC_BIND=spread OMP_WAIT_POLICY=default
+method:      20 fixed iterations per run (-e 0), median of 15 runs;
+             time = PageRank iteration loop only (loading not timed)
+             speedup = serial median / variant median
+             min-max = fastest and slowest of the runs (shows noise)
+
+email-Enron  (36692 vertices, 367662 edges)
+--------------------------------------------------------------------------------
+variant    threads   median ms/it       min-max ms/it  speedup  efficiency
+serial           1          1.369         1.049-3.201     1.00           -
+static           1          1.313         0.999-3.227     1.04        104%
+static           2          0.828         0.733-2.786     1.65         83%
+static           4          0.721         0.520-3.296     1.90         47%
+static           8          0.765         0.609-3.141     1.79         22%
+
+rmat-20  (1048576 vertices, 16087413 edges)
+--------------------------------------------------------------------------------
+variant    threads   median ms/it       min-max ms/it  speedup  efficiency
+serial           1        196.074     182.812-206.367     1.00           -
+static           1        197.358     178.367-245.329     0.99         99%
+static           2        118.788     108.412-148.359     1.65         83%
+static           4         92.320      80.757-126.943     2.12         53%
+static           8         93.488      73.384-154.329     2.10         26%
+
+
+Notes (Stage 1, written after this run)
+=======================================
+
+Status
+- Variants benchmarked: serial (Stage 0) and static (Stage 1).
+- soc-LiveJournal1 is NOT included: the SNAP download stalled at ~5 KB/s and
+  stopped at 15 MB of ~250 MB. rmat-20 (tools/gen_rmat.py, Graph500
+  parameters, ids randomly permuted) stands in as the large power-law graph.
+- Benchmarking was stopped early: the per-thread edge-imbalance analysis
+  for static scheduling was started but not finished, so no imbalance
+  figures are reported here.
+
+Results
+- Best static speedup: 1.90x on email-Enron and 2.12x on rmat-20, both at
+  4 threads (4 physical cores). 8 threads (hyperthreads) gives no further
+  gain on either graph.
+- Static at 1 thread matches serial within noise (0.99x-1.04x), so the
+  parallel code adds no single-thread overhead.
+- Parallel efficiency at 4 threads: 47% (Enron), 53% (rmat-20).
+
+Noise: read the min-max column before trusting a median
+- This is a laptop CPU (turbo/thermal limits) under WSL2, with Windows
+  sharing the host. Max times are up to 2-3x the min (Enron serial:
+  1.05-3.20 ms/it), and repeated 2-thread rmat-20 runs ranged from 122 to
+  194 ms/it. Treat differences under ~15% as noise.
+- Run the final report numbers on native Linux, plugged in, idle.
+
+Measurement fixes made while benchmarking
+- Thread-pool startup was timed inside the first iteration (23 ms/it on a
+  6-vertex graph). driver.h now starts the pool before timing.
+- Serial used std::vector indexing and static used raw pointers, which made
+  1-thread static ~5% faster than serial and inflated every speedup.
+  Serial now uses the same raw-pointer code; the pragmas are the only
+  difference.
+- OMP_PLACES=cores with 8 threads pinned two spinning threads per place:
+  ~17 ms/it vs ~1.8 ms/it unpinned on Enron. The script uses
+  OMP_PLACES=threads OMP_PROC_BIND=spread (one thread per core up to 4).
+- OMP_WAIT_POLICY=passive was ~4x slower on Enron (3.7 vs 0.85 ms/it), so
+  the default policy is kept. This shows the cost of the 4 fork/join
+  regions per iteration in the static variant.
+
+Interpretation (hypotheses, not yet measured)
+- Enron: one iteration is ~1 ms, split across 4 parallel regions, so
+  fork/join and barrier overhead is a large fraction of the work.
+  Candidate fix: one parallel region per run, with omp for inside it.
+- rmat-20: the 8 MB contrib vector is gathered at random, so the SPMV is
+  likely memory-latency/bandwidth bound. That would cap scaling on this
+  dual-channel laptop regardless of scheduling.
+- Load imbalance: rmat-20's ids are randomly permuted, so equal vertex
+  blocks probably hold similar edge counts. Static imbalance may then
+  matter less there than on real graphs with clustered ids (Enron,
+  LiveJournal). Check with the edge-per-thread analysis before Stage 2.
+
+Reproduce
+  make data-rmat          # generate data/rmat-20.txt (~30 s)
+  make bench              # or: REPEATS=15 bench/run_bench.sh

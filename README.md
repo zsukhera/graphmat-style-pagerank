@@ -101,7 +101,7 @@ Our scaling curves will be shown next to GraphMat's PageRank trend (its Fig. 5a)
 - [x] Paper analysis and project proposal (Milestone 2)
 - [x] Serial baseline: graph loader, CSR/CSC builder, SPMV PageRank
 - [x] Correctness harness (serial and NetworkX cross-checks)
-- [ ] Stage 1: OpenMP static scheduling
+- [x] Stage 1: OpenMP static scheduling (implemented and passing tests; benchmarks pending)
 - [ ] Stage 2: OpenMP dynamic scheduling with over-partitioning
 - [ ] Stage 3: SIMD inner loop
 - [ ] Stage 4: combined variant
@@ -173,10 +173,28 @@ Each `src/<name>.cpp` builds into its own executable `bin/<name>`, with `src/com
 | `make clean` | Remove `bin/` |
 | `make help` | List these targets |
 
+### Running a variant
+
+```bash
+bin/pagerank_static data/email-Enron.txt -t 4 -r 10 -o ranks.txt
+```
+
+| Option | Meaning |
+|---|---|
+| `-o FILE` | write one `vertex rank` line per vertex |
+| `-t N` | OpenMP threads (default: `OMP_NUM_THREADS`, else all cores) |
+| `-r N` | run N times; report the median time (and the minimum) |
+| `-i N` | maximum iterations (default 1000) |
+| `-e EPS` | L1 convergence threshold (default 1e-10); `0` runs exactly `-i` iterations |
+| `-d D` | damping factor (default 0.85) |
+
+A run that stops at `-i` without converging is flagged in the output and on stderr.
+
 ### Repository layout
 
 ```
 src/common.h        graph loader + transposed-CSR builder shared by all variants
+src/driver.h        shared CLI, timing and output (each variant calls run_variant)
 src/*.cpp           one PageRank variant per file → bin/<name>
 tests/tiny.txt      6-node hand-made graph (hub, cycle, source, dangling node)
 tests/edge_cases.txt duplicate edges, self-loop, isolated ids, many dangling nodes
