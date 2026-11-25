@@ -1,0 +1,12 @@
+# Tiny hand-made test graph for the PageRank baseline (SNAP-style edge list)
+# Nodes: 6 Edges: 8
+# Node 2 = hub (4 in-edges), 0->1->2->0 = cycle, 3 = no in-edges, 5 = dangling (no out-edges)
+# FromNodeId	ToNodeId
+0	1
+0	2
+1	2
+2	0
+3	2
+3	4
+4	2
+4	5

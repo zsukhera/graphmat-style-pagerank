@@ -71,17 +71,18 @@ PRResult pageRank_serial(const CSRGraph& g, double d = 0.85,
         //     out of the system. Collect it here and share it equally among
         //     all vertices below (NetworkX does the same).
         double dangling_sum = 0.0;
-        // TODO: add x[u] for every u with g.out_deg[u] == 0
+        for (vid_t u = 0; u < n; ++u)
+            if (g.out_deg[u] == 0) dangling_sum += x[u];
 
         // (b) SEND_MESSAGE: each vertex splits its rank evenly over its
         //     out-edges. Dividing here costs one division per vertex instead
         //     of one per edge inside the inner loop below.
-        // TODO: contrib[u] = x[u] / g.out_deg[u], or 0.0 when out_deg is 0
+        for (vid_t u = 0; u < n; ++u)
+            contrib[u] = (g.out_deg[u] > 0) ? x[u] / g.out_deg[u] : 0.0;
 
         // (c) Rank every vertex receives regardless of its in-edges: the
         //     random-jump share plus its share of the dangling rank.
-        double base = 0.0;
-        // TODO: base = (1 - d) / n + d * dangling_sum / n
+        const double base = (1.0 - d) / n + d * dangling_sum / n;
 
         // (d) The SPMV. Each vertex pulls from its in-neighbors (row v of
         //     Aᵀ) and writes only x_new[v], so iterations of the outer loop
@@ -90,15 +91,16 @@ PRResult pageRank_serial(const CSRGraph& g, double d = 0.85,
         //     it that simple.
         for (vid_t v = 0; v < n; ++v) {
             double sum = 0.0;
-            // TODO: for k in [g.row_ptr[v], g.row_ptr[v + 1]):
-            //           sum += contrib[g.col_idx[k]]   (PROCESS_MESSAGE + REDUCE)
-            // TODO: x_new[v] = base + d * sum           (APPLY)
-            (void)sum;
+            // PROCESS_MESSAGE + REDUCE: add up what every in-neighbor sent.
+            for (eid_t k = g.row_ptr[v]; k < g.row_ptr[v + 1]; ++k)
+                sum += contrib[g.col_idx[k]];
+            // APPLY: combine the received rank with the base share.
+            x_new[v] = base + d * sum;
         }
 
         // (e) Convergence: L1 distance between this iteration and the last.
         double diff = 0.0;
-        // TODO: diff = Σ |x_new[v] - x[v]|
+        for (vid_t v = 0; v < n; ++v) diff += fabs(x_new[v] - x[v]);
 
         // Swap instead of copying: x now holds the newest ranks.
         swap(x, x_new);
@@ -114,11 +116,20 @@ PRResult pageRank_serial(const CSRGraph& g, double d = 0.85,
 // Prints the k highest-ranked vertices, highest first.
 static void print_top(const vector<double>& rank, size_t k)
 {
-    // TODO: fill a vector of vertex ids 0..n-1 (std::iota), then
-    //       partial_sort the first k by rank, descending, and print
-    //       "vertex  rank" for each.
-    (void)rank;
-    (void)k;
+    // List of all vertex ids, 0..n-1.
+    vector<vid_t> ids(rank.size());
+    iota(ids.begin(), ids.end(), 0);
+
+    // Only the first k need to be in order, so a partial sort is enough.
+    k = min(k, ids.size());
+    partial_sort(ids.begin(), ids.begin() + k, ids.end(),
+                 [&](vid_t a, vid_t b) { return rank[a] > rank[b]; });
+
+    cout << "top " << k << " vertices:\n";
+    cout << "  vertex  rank\n";
+    for (size_t i = 0; i < k; ++i)
+        cout << "  " << setw(6) << ids[i] << "  " << setprecision(6)
+             << rank[ids[i]] << "\n";
 }
 
 // Writes one "vertex rank" line per vertex, for the NetworkX check.
@@ -126,10 +137,13 @@ static void print_top(const vector<double>& rank, size_t k)
 // limits the accuracy of the comparison.
 static void write_ranks(const string& path, const vector<double>& rank)
 {
-    // TODO: open an ofstream (fail with an error if it can't be opened),
-    //       set setprecision(17), and write "v rank[v]" per line.
-    (void)path;
-    (void)rank;
+    ofstream out(path);
+    if (!out) {
+        cerr << "error: cannot open output file: " << path << "\n";
+        exit(1);
+    }
+    out << setprecision(17);
+    for (size_t v = 0; v < rank.size(); ++v) out << v << " " << rank[v] << "\n";
 }
 
 int main(int argc, char** argv)
@@ -141,25 +155,46 @@ int main(int argc, char** argv)
     }
     const string graph_path = argv[1];
     string out_path;
-    // TODO: if argv[2] is "-o" and argv[3] exists, set out_path = argv[3];
-    //       reject any other extra arguments with the usage message.
+    if (argc == 4 && strcmp(argv[2], "-o") == 0) {
+        out_path = argv[3];
+    } else if (argc != 2) {
+        cerr << "usage: " << argv[0] << " <graph-file> [-o ranks.txt]\n";
+        return 1;
+    }
 
     // Load the graph (not timed: loading isn't part of the algorithm).
-    // TODO: CSRGraph g = load_graph(graph_path);
-    //       load_graph throws std::runtime_error on a bad file; catch it,
-    //       print e.what(), and return 1.
+    CSRGraph g;
+    try {
+        g = load_graph(graph_path);
+    } catch (const exception& e) {
+        cerr << "error: " << e.what() << "\n";
+        return 1;
+    }
+    if (g.n == 0) {
+        cerr << "error: graph has no vertices: " << graph_path << "\n";
+        return 1;
+    }
 
     // Run PageRank.
-    // TODO: PRResult r = pageRank_serial(g);
+    PRResult r = pageRank_serial(g);
 
     // Report. The rank sum should be 1.0 (up to rounding): the cheapest
     // check that no rank was lost, e.g. from forgetting dangling vertices.
-    // TODO: print n, m, count_dangling(g), r.iterations, r.seconds,
-    //       and the sum of r.rank (std::accumulate).
-    // TODO: print_top(r.rank, 10);
-    // TODO: if out_path is set, write_ranks(out_path, r.rank);
+    const double rank_sum = accumulate(r.rank.begin(), r.rank.end(), 0.0);
+    cout << "graph:       " << graph_path << "\n";
+    cout << "vertices:    " << g.n << "\n";
+    cout << "edges:       " << g.m << "\n";
+    cout << "dangling:    " << count_dangling(g) << "\n";
+    cout << "iterations:  " << r.iterations << "\n";
+    cout << "time (s):    " << fixed << setprecision(6) << r.seconds << "\n";
+    cout << "rank sum:    " << setprecision(12) << rank_sum << "\n";
+    cout.unsetf(ios::floatfield);
+    print_top(r.rank, 10);
 
-    (void)graph_path;
-    (void)out_path;
+    // Save every rank to a file if -o was given.
+    if (!out_path.empty()) {
+        write_ranks(out_path, r.rank);
+        cout << "ranks written to " << out_path << "\n";
+    }
     return 0;
 }

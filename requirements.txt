@@ -1,0 +1,5 @@
+# Python packages for the NetworkX correctness checks.
+# nx.pagerank uses the SciPy backend, so numpy and scipy are required too.
+networkx>=3.0
+numpy
+scipy

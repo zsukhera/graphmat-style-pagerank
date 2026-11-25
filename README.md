@@ -114,14 +114,74 @@ Our scaling curves will be shown next to GraphMat's PageRank trend (its Fig. 5a)
 
 **Out of scope:** BFS, SSSP, triangle counting, and collaborative filtering; multi-node/distributed execution; and GPU/OpenCL, which is left as future work.
 
-## Requirements
+## Getting started
 
-- Linux on an x86-64 CPU with AVX2
-- GCC or Clang with OpenMP support
-- Linux `perf`, for hardware-counter profiling
-- Python 3 with NetworkX, for reference correctness checks
+### Requirements
 
-Build and run instructions will be added together with the serial baseline.
+- Linux (native or WSL2) on an x86-64 CPU with AVX2
+- GCC with OpenMP support (C++17), `make`, `curl`
+- Python 3 with `venv`, for the NetworkX correctness checks
+- Linux `perf`, for the profiling stage only
+
+On Ubuntu/Debian:
+
+```bash
+sudo apt install build-essential curl python3 python3-venv
+sudo apt install linux-tools-generic   # optional: perf
+```
+
+### First-time setup
+
+```bash
+git clone <this-repo-url>
+cd graphmat-style-pagerank
+./setup.sh
+```
+
+`setup.sh` is safe to re-run, and finished steps are skipped. It does four things:
+
+1. **Checks the toolchain:** confirms `g++` can build C++17 with OpenMP, and reports AVX2 support, the core count, and whether `perf` hardware counters work.
+2. **Creates `.venv/`:** installs NetworkX, NumPy and SciPy from `requirements.txt`.
+3. **Downloads `email-Enron`** from SNAP into `data/`.
+4. **Builds** every variant into `bin/`.
+
+Add `--large` to also download `soc-LiveJournal1` (~250 MB compressed, ~1 GB unpacked) for the benchmarking runs:
+
+```bash
+./setup.sh --large
+```
+
+Then activate the Python environment in each new shell:
+
+```bash
+source .venv/bin/activate
+```
+
+> **WSL2 note:** WSL2 usually doesn't expose the CPU's hardware counters, so `perf stat` won't work there. Timing runs are fine on WSL2. Run the profiling stage on a native Linux machine.
+
+### Build commands
+
+Each `src/<name>.cpp` builds into its own executable `bin/<name>`, with `src/common.h` shared by all of them.
+
+| Command | What it does |
+|---|---|
+| `make` | Optimized build (`-O3 -march=native -fopenmp`) of every variant into `bin/` |
+| `make debug` | AddressSanitizer + UBSan build into `bin/debug/`, for catching memory bugs |
+| `make data` | Download `email-Enron` into `data/` |
+| `make data-large` | Download `soc-LiveJournal1` into `data/` |
+| `make clean` | Remove `bin/` |
+| `make help` | List these targets |
+
+### Repository layout
+
+```
+src/common.h        graph loader + transposed-CSR builder shared by all variants
+src/*.cpp           one PageRank variant per file → bin/<name>
+tests/tiny.txt      6-node hand-made graph (hub, cycle, source, dangling node)
+data/               downloaded SNAP graphs (git-ignored)
+setup.sh            first-time setup
+requirements.txt    Python packages for the correctness checks
+```
 
 ## References and attribution
 

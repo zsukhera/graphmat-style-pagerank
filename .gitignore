@@ -1,0 +1,47 @@
+# ---- Build output ----
+build/
+bin/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*.o
+*.obj
+*.d
+*.gch
+*.a
+*.so
+*.out
+
+# ---- Profiling and compiler reports ----
+perf.data
+perf.data.old
+*.optrpt
+gmon.out
+
+# ---- Graph datasets (large; download them, don't commit them) ----
+data/
+datasets/
+*.txt.gz
+*.mtx.gz
+
+# ---- Python (NetworkX correctness checks) ----
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# ---- Editors and OS ----
+.vscode/
+.idea/
+.cache/
+*.swp
+*~
+.DS_Store
+*:Zone.Identifier
+
+# ---- Benchmark results ----
+# Uncomment if raw results should stay local; keep them tracked if they feed the report.
+# results/
