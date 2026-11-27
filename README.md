@@ -58,18 +58,20 @@ Each stage is benchmarked before the next one starts, so every optimization's co
 
 | # | Variant | Technique | What it isolates |
 |---|---|---|---|
-| 0 | **Serial baseline** | CSR/CSC storage, single-threaded SPMV | Reference for correctness and speedup |
+| 0 | **Serial baseline** | CSR of Aᵀ (the same arrays as the CSC of A), single-threaded SPMV | Reference for correctness and speedup |
 | 1 | **OpenMP static** | `#pragma omp parallel for schedule(static)` | Naive parallelism; exposes load imbalance |
 | 2 | **OpenMP dynamic** | P ≫ T matrix partitions + `schedule(dynamic)` | Load-balancing gain on power-law graphs |
-| 3 | **SIMD** | `#pragma omp simd`, falling back to AVX2 intrinsics | Vectorization gain of the inner accumulate loop |
-| 4 | **Combined** | Dynamic OpenMP + SIMD | End-to-end best configuration |
+| 3 | **SIMD** | Sliced ELLPACK layout; `#pragma omp simd`, falling back to AVX2 gather intrinsics | Vectorization gain of the inner accumulate loop |
+| 4 | **Combined** | Dynamic OpenMP + SIMD on the ELLPACK layout | End-to-end best configuration |
+
+Stages 0–2 store the graph as CSR. Stages 3–4 convert it to sliced ELLPACK (SELL-4-σ), where the SIMD lanes run across rows. Plain ELLPACK pads every row to the longest one, which on `rmat-20` would take 154.5 GiB. The remaining work is laid out step by step in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ### Research questions
 
 1. **How large is the load-balancing gap?** The paper describes dynamic over-partitioning qualitatively. We measure static vs. dynamic scheduling directly.
 2. **What does SIMD add on its own?** We reproduce the paper's ablation method (its Fig. 7) on our own implementation instead of citing its reported 1.2–1.9×.
 3. **Does "fewer instructions, fewer stalls" still explain the speedup?** We profile every variant with hardware counters to check whether that holds for a simpler, non-DCSC implementation or whether a different bottleneck dominates.
-4. **Does the scaling trend hold on smaller machines?** The paper reports results on 24 cores. We test on the 4–16 cores we have access to.
+4. **Does the scaling trend hold on smaller machines?** The paper reports results on 24 cores. We test every variant at 1–16 threads.
 
 ## Technical challenges
 
@@ -82,7 +84,7 @@ Each stage is benchmarked before the next one starts, so every optimization's co
 
 **Correctness:** each parallel variant's converged PageRank vector is compared against the serial baseline and against [NetworkX `pagerank`](https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.link_analysis.pagerank_alg.pagerank.html). The pass criterion is an L1 distance below `1e-6`.
 
-**Performance:** wall-clock runtime and speedup (serial ÷ parallel) at 1, 2, 4, 8, … threads, up to the machine's core count.
+**Performance:** wall-clock runtime and speedup (serial ÷ parallel) at 1, 2, 4, 8 and 16 threads for every variant, on a machine with at least 16 physical cores.
 
 **Profiling:** `perf stat` measurements of instructions, stall cycles, cache misses, and IPC, in the style of the paper's Fig. 6.
 
@@ -101,12 +103,16 @@ Our scaling curves will be shown next to GraphMat's PageRank trend (its Fig. 5a)
 - [x] Paper analysis and project proposal (Milestone 2)
 - [x] Serial baseline: graph loader, CSR/CSC builder, SPMV PageRank
 - [x] Correctness harness (serial and NetworkX cross-checks)
-- [x] Stage 1: OpenMP static scheduling (implemented and passing tests; benchmarks pending)
-- [ ] Stage 2: OpenMP dynamic scheduling with over-partitioning
-- [ ] Stage 3: SIMD inner loop
+- [x] Stage 1: OpenMP static scheduling (benchmarked on a 4-core laptop only; 1–16-thread runs pending)
+- [ ] Benchmark machine with at least 16 cores; thread sweep changed to 1–16
+- [ ] Second real-world graph; edges-per-thread imbalance analysis
+- [ ] Stage 2: OpenMP dynamic scheduling with over-partitioning (CSR)
+- [ ] Stage 3: sliced ELLPACK layout, scalar control variant, SIMD kernel
 - [ ] Stage 4: combined variant
-- [ ] Benchmarks and `perf` profiling across datasets
+- [ ] Benchmarks at 1–16 threads and `perf` profiling across datasets
 - [ ] Final report (Milestone 3)
+
+Each open item is a step in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Scope
 
