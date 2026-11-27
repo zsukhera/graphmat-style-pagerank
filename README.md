@@ -196,6 +196,7 @@ A run that stops at `-i` without converging is flagged in the output and on stde
 ```
 src/common.h        graph loader + transposed-CSR builder shared by all variants
 src/driver.h        shared CLI, timing and output (each variant calls run_variant)
+src/sell.h          sliced-ELLPACK layout + builder (SELL-C-sigma) for SIMD variants
 src/*.cpp           one PageRank variant per file → bin/<name>
 tests/tiny.txt      6-node hand-made graph (hub, cycle, source, dangling node)
 tests/edge_cases.txt duplicate edges, self-loop, isolated ids, many dangling nodes
