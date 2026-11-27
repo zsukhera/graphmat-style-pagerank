@@ -45,7 +45,7 @@ struct SELLGraph {
     }
 };
 
-// Rows keep their CSR order (ascending id), so each row's sum is added in the
+// Row entries keep CSR order (ascending id), so each row's sum is added in the
 // same order as in the serial code. Padding entries hold the index n: the
 // caller keeps contrib[n] = 0.0, so the kernel needs no masks or bounds checks.
 // sigma must be a multiple of SELL_C.
