@@ -63,11 +63,15 @@ $(DATA_DIR)/rmat-%.txt:
 	mv $@.part $@
 
 # Downloads to a .part file first so an interrupted download never
-# leaves a truncated graph that looks complete.
+# leaves a truncated graph that looks complete. Re-running resumes the
+# .gz.part (curl -C -). Older curl exits non-zero when
+# the part file is already complete (HTTP 416), so a failed curl is accepted
+# if the part file is a whole gzip. A corrupt part file is never repaired by
+# resuming: delete it by hand.
 $(DATA_DIR)/%.txt:
 	@mkdir -p $(DATA_DIR)
-	curl -fL --retry 2 -o $@.gz.part $(SNAP_URL)/$*.txt.gz
-	gunzip -c $@.gz.part > $@.part
+	curl -fL -C - --retry 2 -o $@.gz.part $(SNAP_URL)/$*.txt.gz || gunzip -t $@.gz.part
+	gunzip -c $@.gz.part > $@.part || { rm -f $@.part; echo "corrupt $@.gz.part: delete it and re-run make" >&2; false; }
 	mv $@.part $@
 	rm -f $@.gz.part
 
