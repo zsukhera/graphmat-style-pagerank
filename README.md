@@ -187,6 +187,7 @@ bin/pagerank_static data/email-Enron.txt -t 4 -r 10 -o ranks.txt
 | `-i N` | maximum iterations (default 1000) |
 | `-e EPS` | L1 convergence threshold (default 1e-10); `0` runs exactly `-i` iterations |
 | `-d D` | damping factor (default 0.85) |
+| `-p K` | partitions per thread, K >= 1 (default 8); used by the dynamic variant only |
 
 A run that stops at `-i` without converging is flagged in the output and on stderr.
 
