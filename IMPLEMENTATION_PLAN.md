@@ -1,144 +1,139 @@
 # Implementation plan: what is left
 
-Covers everything between the current repo (Stages 0 and 1 done) and the Milestone 3 report. Proposal: `SecG_B_7/GraphMat_Proposal_Paper7.pdf`.
+All the code the proposal calls for is on `main`. What is left is checking it on Linux, running it on a 16-core machine, and writing the report. Proposal: `SecG_B_7/GraphMat_Proposal_Paper7.pdf`.
 
 ## Where we are
 
 | Proposal item | State |
 |---|---|
-| Serial baseline, CSR/CSC SPMV (4.1) | Done: `src/pagerank_serial.cpp` |
-| Correctness vs. serial and NetworkX (5.1) | Done: `make test` |
-| Stage 1, OpenMP static (4.2) | Done: `src/pagerank_static.cpp`. Benchmarked only on a 4-core / 8-thread laptop under WSL2 |
-| Stage 2, OpenMP dynamic, over-partitioned | Not started |
-| Stage 3, SIMD | Not started |
-| Stage 4, combined | Not started |
-| Thread sweep 1–16 (5.2, slide 7) | Not done: highest count run so far is 8 |
-| Two real-world graphs (5.2) | One (`email-Enron`). The `soc-LiveJournal1` download failed |
-| `perf` profiling (5.3) | Not started; WSL2 does not expose the counters |
-| Comparison to the paper's Fig. 5a, report (5.4) | Not started |
+| Serial baseline, CSR SPMV (4.1) | Done: `src/pagerank_serial.cpp` |
+| Stage 1, OpenMP static | Done: `src/pagerank_static.cpp` |
+| Stage 2, OpenMP dynamic, over-partitioned | Done: `src/pagerank_dynamic.cpp`, option `-p K` |
+| Stage 3, SIMD | Done: `src/sell.h` (sliced ELLPACK), `src/pagerank_ell_scalar.cpp` (scalar control), `src/pagerank_simd.cpp` (AVX2) |
+| Stage 4, combined | Done: `src/pagerank_combined.cpp` |
+| Correctness vs. serial and NetworkX (5.1) | Done: `make test`, every variant at 1, 3 and 16 threads |
+| Thread sweep 1–16 (5.2) | Script done: `bench/run_bench.sh` defaults to 1, 2, 4, 8, 16. **Not run**: needs a 16-core machine |
+| Two real-world graphs (5.2) | One (`email-Enron`). `make data-large` now resumes a broken download; `soc-LiveJournal1` still not fetched |
+| `perf` profiling (5.3) | Script done: `bench/run_perf.sh`. **Never run against real `perf`** |
+| Comparison to the paper, report (5.4) | Plot script done: `tools/plot_bench.py`. Report not started |
 
-## Decisions
+The decisions from the first version of this plan stand: CSR is the one sparse format, the SIMD variants use a sliced-ELLPACK copy built from it (SELL-4-σ, σ = 16,384), and every variant is benchmarked at 1, 2, 4, 8 and 16 threads.
 
-**Storage for Stages 0–2: CSR of Aᵀ.** This is what `common.h` already builds. The same three arrays are the CSC of A, so it satisfies the proposal's "CSR (or CSC)" either way. We keep it because each row is one vertex pulling from its in-neighbors, so every thread writes only its own `x_new[v]` and the SPMV loop has no races.
+## What has not been verified
 
-**Storage for Stages 3–4: sliced ELLPACK (SELL-4-σ), built from the CSR.** ELLPACK is what makes SIMD work here: with rows padded to a common width, the four AVX2 lanes each sum a *different row*, so there is no per-row reduction to break up and short rows vectorize as well as long ones. Plain ELLPACK, which pads every row to the longest row in the matrix, cannot be used on these graphs. Measured on `rmat-20` (1,048,576 vertices, 16,087,413 edges, max in-degree 39,547, median in-degree 1):
+Everything above was built and tested on one Windows laptop with MinGW g++ 16.2, because no Linux machine was available. The tests pass there (108 of 108). These things are still unknown:
 
-| Layout | Stored index slots | vs. edges |
-|---|---|---|
-| Plain ELLPACK | 41,468,035,072 (154.5 GiB of `int32`) | 2577.7× |
-| SELL-4, no sorting (σ = 1) | 57,867,336 | 3.60× |
-| SELL-4, σ = 1,024 | 22,261,456 | 1.38× |
-| **SELL-4, σ = 16,384** | **17,280,772** | **1.07×** |
-| SELL-4, σ = n (full sort) | 16,193,344 | 1.01× |
+- Whether it builds without warnings and passes on Linux with GCC 13, the team's compiler.
+- Whether the ELLPACK variants are memory-safe under AddressSanitizer. `make debug` does not work with MinGW, and these variants index one element past the vertex count by design.
+- Whether GCC 13 leaves the `ell_scalar` kernel scalar. GCC 16.2 does. If GCC 13 vectorizes it, the control is no longer a control.
+- Whether `bench/run_bench.sh` works with the real `bc` and `lscpu`. It was run with stand-ins.
+- Whether `bench/run_perf.sh` parses real `perf stat -x,` output. It was run against an imitation written from the man page.
+- Every timing. The laptop numbers in `results/` and in the pull requests are from 4 cores and are not for the report.
 
-SELL-C-σ (Kreutzer et al., 2014) sorts rows by length inside windows of σ rows, cuts them into chunks of C rows, and pads each chunk only to its own longest row. We use C = 4 (four `double` lanes in AVX2) and σ = 16,384. A full sort pads slightly less, but it would put every hub row at the front, so a static split would hand all of them to thread 0 and the SIMD-static variant would no longer be comparable to the CSR-static one.
+## The six variants and what they measure
 
-**Threads: every variant is run at 1, 2, 4, 8 and 16 threads.** This needs a machine with at least 16 physical cores. On the current laptop (4 cores, 8 hardware threads) a 16-thread run is oversubscribed and says nothing about scaling. The same machine must be native Linux, because `perf` needs the hardware counters.
+| | scalar, CSR | scalar, ELLPACK | AVX2, ELLPACK |
+|---|---|---|---|
+| 1 thread | `serial` | | |
+| static schedule | `static` | `ell_scalar` | `simd` |
+| dynamic schedule | `dynamic` | | `combined` |
 
-## Variants after this plan
-
-Scheduling and kernel are varied independently, so each effect can be read off as a ratio at the same thread count.
-
-| Binary | Layout | Kernel | Schedule | Stage |
-|---|---|---|---|---|
-| `pagerank_serial` | CSR | scalar | none (1 thread) | 0, done |
-| `pagerank_static` | CSR | scalar | static | 1, done |
-| `pagerank_dynamic` | CSR | scalar | dynamic, P = K·T | 2 |
-| `pagerank_ell_scalar` | SELL-4-σ | scalar | static | 3 (control) |
-| `pagerank_simd` | SELL-4-σ | AVX2 gather | static | 3 |
-| `pagerank_combined` | SELL-4-σ | AVX2 gather | dynamic, P = K·T | 4 |
+At the same thread count:
 
 - Load-balancing gain = `static` ÷ `dynamic`
-- Cost or gain of the layout change alone = `static` ÷ `ell_scalar`
+- Effect of the layout change alone = `static` ÷ `ell_scalar`
 - SIMD gain alone = `ell_scalar` ÷ `simd`
 - End to end = `serial` ÷ `combined`
 
-Without `pagerank_ell_scalar`, a difference between `static` and `simd` could come from the row sorting and padding instead of from vectorization.
-
 ## Steps
 
-Each step ends with `make test` passing before the next one starts.
+### 1. Linux check (any Linux machine; WSL2 is enough except for `perf`)
 
-### 1. Benchmark machine and thread sweep
+```bash
+./setup.sh                      # toolchain, venv, email-Enron, build
+make 2>&1 | grep -i warning     # expect nothing
+make test                       # expect "0 failed"
+make debug
+for v in bin/debug/pagerank_*; do
+  for g in tests/tiny.txt tests/edge_cases.txt tests/rmat-10.txt data/email-Enron.txt; do
+    "$v" "$g" -t 3 > /dev/null || echo "FAILED: $v $g"
+  done
+done
+objdump -d bin/pagerank_ell_scalar | grep -c vgather   # expect 0
+objdump -d bin/pagerank_simd       | grep -c vgather   # expect at least 1
+ITERS=2 REPEATS=1 OUT_DIR=/tmp/benchcheck bench/run_bench.sh data/email-Enron.txt
+```
 
-- Get access to a native Linux machine with ≥ 16 physical cores and AVX2. Record `lscpu` output in the results file.
-- `bench/run_bench.sh`: change the default `THREADS` from "powers of two up to `nproc`" to `1 2 4 8 16`, and write a warning into the report header when a thread count exceeds `nproc`.
-- Pinning: the script's `OMP_PLACES=threads` comment describes the laptop's sibling numbering. On the new machine check `lscpu -e`; with 16 threads on ≥ 16 cores, `OMP_PLACES=cores OMP_PROC_BIND=spread` puts one thread on each core.
-- If the machine has two sockets, the rank vectors are allocated by one thread and land on one NUMA node. Either keep all 16 threads on one socket with `numactl`, or note the effect in the report.
-- Re-run Stages 0 and 1 there. These replace the laptop numbers in `results/`.
+- If `ell_scalar` contains gathers under GCC 13, switch vectorization off for its SPMV loop (its header comment says how the requirement was checked) and send that as a pull request.
+- Use `email-Enron` for the benchmark-script check, not the tiny test graphs: on those an iteration takes under a microsecond, the time prints as `0.000000`, and the script's speedup calculation divides by zero.
+- Fix whatever this turns up before step 4. Nothing later is worth running on unchecked code.
 
-Verify: `results/benchmarks.txt` shows 16 as the highest thread count and no oversubscription warning.
+### 2. Benchmark machine
 
-### 2. Data: second real-world graph and imbalance figures
+- Native Linux, at least 16 physical cores, AVX2. Record `lscpu` in the results file (the script already writes the CPU line).
+- Pinning: check `lscpu -e`. With 16 threads on at least 16 cores, run with `OMP_PLACES=cores OMP_PROC_BIND=spread`; the script's default (`threads`) was tuned on a laptop.
+- Two sockets: the rank vectors are allocated by one thread and land on one NUMA node. Keep all 16 threads on one socket with `numactl`, or state the effect in the report.
+- Read `/sys/devices/system/cpu/vulnerabilities/gather_data_sampling` and record it. If the "Downfall" fix is active, gathers are slower and the SIMD result must be read with that in mind.
+- Repeat step 1 on this machine, including one real `bench/run_perf.sh` run.
 
-- Retry `soc-LiveJournal1`. The Makefile rule restarts from zero on every attempt; add `-C -` to its `curl` so a stalled download resumes. If SNAP stays unusable, use another directed SNAP graph with its original vertex ids.
-- Finish the edges-per-thread analysis that Stage 1 left open: `tools/edge_balance.py <graph>` prints, for T = 2, 4, 8, 16, the edges in the heaviest equal-vertex block divided by the mean block. That ratio is the most a load balancer can recover over static.
-- Already measured for `rmat-20`: 1.008 (T=2), 1.028 (T=4), 1.058 (T=8), 1.070 (T=16). Its ids are randomly permuted, so static blocks are already balanced to within 7% and Stage 2 cannot gain more than that on this graph. The load-balancing question can only be answered on a graph with clustered ids, which is why the real graph is required and not optional.
+Verify: `results/benchmarks.txt` has 16 as the highest thread count and no oversubscription warning.
 
-Verify: the script's edge total for `rmat-20` equals the 16,087,413 the binaries report.
+### 3. Data
 
-### 3. Stage 2: `src/pagerank_dynamic.cpp`
+- `make data-large` for `soc-LiveJournal1`. It resumes if the connection drops; re-run it until it finishes. If SNAP stays unusable, pick another directed SNAP graph with its original vertex ids.
+- `make data-rmat` for `rmat-20`.
+- Run `python tools/edge_balance.py <graph>` on each and keep the output for the report. `rmat-20` is already known: 1.008, 1.028, 1.058 and 1.070 at 2, 4, 8 and 16 threads. Its ids are randomly permuted, so dynamic scheduling can recover at most 7% there.
+- If the real graph's ratio at 16 threads is also close to 1, the answer to the load-balancing question is "there is little to recover on these graphs". An RMAT graph without the id permutation would then be a useful stress case; `tools/gen_rmat.py` always permutes today, so that needs a small option.
+- ELLPACK padding: σ = 16,384 was chosen on `rmat-20` (1.07× the edge count). Nothing in the repo prints the padding for another graph yet. Add a few lines of NumPy next to `tools/edge_balance.py` that report stored slots ÷ edges, and run it on the real graph before trusting σ there.
 
-- Copy of `pagerank_static.cpp` with one change in the SPMV loop (d): `schedule(dynamic, chunk)` with `chunk = ceil(n / (K·T))`. That is equal-vertex over-partitioning into P = K·T blocks, handed out at run time. Loops (a), (b) and (e) do the same work for every vertex and stay static.
-- `driver.h`: add `-p K` (partitions per thread) to `PRParams`. The static variants ignore it.
-- Sweep K ∈ {1, 2, 4, 8, 16, 32, 64} at 16 threads on the skewed graph, then fix one K for all final runs and state it in the report.
+### 4. Choose K (partitions per thread)
 
-Verify: `make test`; then `static` ÷ `dynamic` at each thread count, reported next to the imbalance ratio from step 2.
+`-p` defaults to 8, which is a placeholder.
 
-### 4. SELL layout: `src/sell.h`
+```bash
+for K in 1 2 4 8 16 32 64; do
+  for v in dynamic combined; do
+    printf '%s K=%s ' $v $K
+    bin/pagerank_$v data/<skewed graph>.txt -t 16 -p $K -i 20 -e 0 -r 10 | grep '^time/iter'
+  done
+done
+```
 
-- `build_sell(const CSRGraph&, sigma)` returns: `cols` (`int32`, stored column-major inside each chunk so one SIMD step reads four adjacent indices), `chunk_ptr` (start of each chunk in `cols`), and `perm` (row slot → vertex id).
-- Row order inside a window: descending in-degree, stable. Neighbor order inside a row is kept from the CSR, so each row's sum adds in the same order as serial.
-- Padding slots hold index `n`, and `contrib` gets one extra element that is always `0.0`. The kernel then needs no masks.
-- If `n` is not a multiple of 4, the missing lanes of the last chunk are empty rows whose `perm` entry is `n`; the rank vectors get the same extra element and are cut back to `n` before returning.
-- Built inside the variant's function before its timer starts, so build time is never in the reported time.
+Pick one K, set it as the default in `src/driver.h` (the comment there marks it provisional), and send that as a pull request. `bench/run_bench.sh` does not pass `-p`, so the default is what the final run uses.
 
-Verify: the builder prints its slot count; for `rmat-20` at σ = 16,384 it must be 17,280,772. `tests/tiny.txt` has 6 vertices and covers the not-a-multiple-of-4 case.
+### 5. Final benchmarks
 
-### 5. Stage 3: `src/pagerank_ell_scalar.cpp` and `src/pagerank_simd.cpp`
+- `make bench` on the idle benchmark machine: five parallel variants × threads 1, 2, 4, 8, 16 × three graphs, 20 fixed iterations, median of 10 runs.
+- Commit the new `results/benchmarks.txt` and `.csv`. They replace the laptop numbers, including the notes at the bottom of the `.txt`, which describe the laptop run.
 
-- Both loop over chunks with `schedule(static)` and write results through `perm`.
-- `ell_scalar`: plain loops. GCC can vectorize the across-rows loop with gathers on its own at `-O3 -march=native`, so vectorization is switched off for this kernel and confirmed off with `-fopt-info-vec`.
-- `simd`: first `#pragma omp simd` on the lane loop, as the proposal says, checked with `-fopt-info-vec`. If the compiler does not emit gathers, use intrinsics: `_mm_loadu_si128` loads four indices, `_mm256_i32gather_pd(c, idx, 8)` fetches the four contributions, `_mm256_add_pd` accumulates. The four results are stored to a small buffer and written to `x_new[perm[..]]` one by one (AVX2 has no scatter).
+### 6. `perf` profiling
 
-Verify: `make test`, plus `make debug` (ASan catches a gather that reads past `contrib`).
+- Choose the stall event for the CPU from `perf list` and pass it through `EVENTS`.
+- `bench/run_perf.sh` on the largest graph, threads 1 and 16. Commit `results/perf.csv`.
+- If counters jump between repeats, raise `ITERS_HI`.
 
-### 6. Stage 4: `src/pagerank_combined.cpp`
+### 7. Plots
 
-- The `simd` kernel with `schedule(dynamic, chunk)` over SELL chunks, using the K fixed in step 3.
+- `python tools/plot_bench.py` writes `results/speedup-<graph>.png`. Commit them with the final CSV.
 
-Verify: `make test`.
+### 8. Report (Milestone 3) and README
 
-### 7. Test harness
-
-- `tests/run_tests.sh` runs each variant at the default thread count only. Run every variant at `-t 1`, `-t 3` and `-t 16`: the odd count catches block-boundary mistakes, and 16 is the count the report uses.
-
-Verify: `make test` output lists all three thread counts for all six binaries, 0 failed.
-
-### 8. Final benchmarks
-
-- Six binaries × threads {1, 2, 4, 8, 16} × graphs {`email-Enron`, the second real graph, `rmat-20`}, 20 fixed iterations, median of 10 runs, on the step 1 machine, idle.
-- Commit `results/benchmarks.txt` and `.csv` from that run.
-
-### 9. `perf` profiling: `bench/run_perf.sh`
-
-- `perf stat` counts the whole process, and graph loading is far longer than the iterations. Run each configuration twice, at 10 and at 110 fixed iterations, and subtract: the difference is exactly 100 iterations with loading and the SELL build cancelled out.
-- Counters: instructions, cycles (IPC = instructions ÷ cycles), cache misses, stalled cycles. Event names for stalls differ between Intel and AMD; pick them from `perf list` on the machine.
-- All six binaries at 1 and 16 threads on the largest graph. Output: `results/perf.csv`.
-
-### 10. Plots and report
-
-- `tools/plot_bench.py` reads `results/benchmarks.csv` and draws speedup against threads (1–16) per graph, one line per variant plus the ideal line. This adds `matplotlib` to `requirements.txt`; nothing already installed draws figures.
-- GraphMat's Fig. 5a trend goes next to ours as a qualitative reference only.
-- Report: the four ratios from the variants table at each thread count, the `perf` table, the fixed K and σ with the sweeps that chose them, final dataset list, and the individual contribution breakdown the proposal promises.
-- Tick the README roadmap.
+- The four ratios above at each thread count, per graph.
+- The `perf` table, and whether "fewer instructions, fewer stalls" holds here.
+- K and σ, each with the sweep that chose it; the imbalance ratios from step 3 next to the measured static-versus-dynamic gap.
+- The SIMD finding as measured. `#pragma omp simd` was tried first and GCC 16.2 did not vectorize the gather in any of three forms, so the kernel uses AVX2 intrinsics. On the laptop, SIMD was about 9–14% faster than the scalar control and most of the gain over CSR came from the layout change; expect to report something of that shape, and report it as it comes out.
+- GraphMat's Fig. 5a trend next to ours, as a qualitative reference only.
+- Final dataset list, and the individual contribution breakdown the proposal promises.
+- README: tick the roadmap, replace the "tentative" dataset table, add the results, and add the `ell_scalar` control to the variants table. The `-p K` row says "dynamic variant only"; `combined` uses it too. If the course requires naming one sparse format, the Stage 0 row should say CSR only.
+- Fill in the `[GROUP NAME]` and `[SECTION]` placeholders in the proposal and slides.
 
 ## Risks
 
-- **SIMD may gain little or nothing.** The kernel is a gather over an 8 MB `contrib` array on `rmat-20`, so it is bound by memory latency, not arithmetic. Gathers are also slowed by the "Downfall" microcode fix on many Intel CPUs; check `/sys/devices/system/cpu/vulnerabilities/gather_data_sampling` on the benchmark machine and record it. A flat result still answers the SIMD research question, and the `perf` numbers explain it.
-- **`email-Enron` will scale poorly at 16 threads.** One iteration is about 1 ms split over four parallel regions, so thread start-up cost is a large share. Report it as the small-graph case.
-- **Memory bandwidth can cap scaling on the large graphs** before 16 threads, for every variant. The stalled-cycle counter in step 9 is what shows this.
+- **SIMD may gain little.** The kernel is a gather over an 8 MB array on `rmat-20`, so it is bound by memory latency. A small or flat result still answers the research question, and the `perf` numbers explain it.
+- **`email-Enron` will scale poorly at 16 threads.** One iteration is about 1 ms split over four parallel regions. Report it as the small-graph case.
+- **Memory bandwidth can cap scaling on the large graphs** before 16 threads, for every variant.
+- **The test suite is slow.** Every variant runs at three thread counts and each check starts Python, so with `email-Enron` and `soc-LiveJournal1` present a full `make test` takes a long time. `THREADS="3" tests/run_tests.sh pagerank_simd` narrows it to one thread count and one variant.
 
-## Reference added by this plan
+## Reference for the ELLPACK layout
 
 M. Kreutzer, G. Hager, G. Wellein, H. Fehske, A. R. Bishop, "A Unified Sparse Matrix Data Format for Efficient General Sparse Matrix-Vector Multiplication on Modern Processors with Wide SIMD Units," SIAM J. Sci. Comput. 36(5), 2014. Format description only; no code is reused.

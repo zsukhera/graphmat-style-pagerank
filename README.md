@@ -101,15 +101,18 @@ Our scaling curves will be shown next to GraphMat's PageRank trend (its Fig. 5a)
 ## Roadmap
 
 - [x] Paper analysis and project proposal (Milestone 2)
-- [x] Serial baseline: graph loader, CSR/CSC builder, SPMV PageRank
-- [x] Correctness harness (serial and NetworkX cross-checks)
-- [x] Stage 1: OpenMP static scheduling (benchmarked on a 4-core laptop only; 1–16-thread runs pending)
-- [ ] Benchmark machine with at least 16 cores; thread sweep changed to 1–16
-- [ ] Second real-world graph; edges-per-thread imbalance analysis
-- [ ] Stage 2: OpenMP dynamic scheduling with over-partitioning (CSR)
-- [ ] Stage 3: sliced ELLPACK layout, scalar control variant, SIMD kernel
-- [ ] Stage 4: combined variant
-- [ ] Benchmarks at 1–16 threads and `perf` profiling across datasets
+- [x] Serial baseline: graph loader, CSR builder, SPMV PageRank
+- [x] Correctness harness (serial and NetworkX cross-checks), every variant at 1, 3 and 16 threads
+- [x] Stage 1: OpenMP static scheduling
+- [x] Stage 2: OpenMP dynamic scheduling with over-partitioning (CSR)
+- [x] Stage 3: sliced ELLPACK layout, scalar control variant, AVX2 kernel
+- [x] Stage 4: combined variant (dynamic scheduling + AVX2 kernel)
+- [x] Tooling: 1–16 thread sweep in the benchmark script, `perf` script, speedup plots, edges-per-thread analysis, resumable dataset download
+- [ ] Linux check of all of the above (built and tested so far only with MinGW on Windows)
+- [ ] Benchmark machine with at least 16 cores
+- [ ] Second real-world graph
+- [ ] Partitions-per-thread sweep, then final benchmarks at 1–16 threads
+- [ ] `perf` profiling
 - [ ] Final report (Milestone 3)
 
 Each open item is a step in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
