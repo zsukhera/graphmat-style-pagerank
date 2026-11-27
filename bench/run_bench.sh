@@ -14,7 +14,8 @@
 #   default graphs: data/email-Enron.txt, data/rmat-*.txt and
 #   data/soc-LiveJournal1.txt, whichever are present
 # Environment overrides:
-#   THREADS="1 2 4 8"   thread counts      (default: 1 2 4 ... up to nproc, plus nproc)
+#   THREADS="1 2 4 8"   thread counts      (default: 1 2 4 8 16, whatever nproc is;
+#                       counts above nproc are run but flagged as oversubscribed)
 #   ITERS=20            iterations per run
 #   REPEATS=10          runs per configuration (median reported)
 #   VARIANTS="pagerank_static ..."  (default: everything in bin/ except serial)
@@ -28,18 +29,27 @@ REPEATS=${REPEATS:-10}
 OUT_DIR=${OUT_DIR:-results}
 NPROC=$(nproc)
 
-if [ -z "${THREADS:-}" ]; then
-    THREADS=""
-    t=1
-    while [ "$t" -lt "$NPROC" ]; do THREADS+="$t "; t=$((t * 2)); done
-    THREADS+="$NPROC"
-fi
+THREADS=${THREADS:-1 2 4 8 16}
 
-# Pin one thread per physical core first: on this CPU, hardware threads
-# 2k and 2k+1 are hyperthread siblings of core k, so "threads" places with
-# "spread" binding use one sibling per core up to the core count, and both
-# siblings beyond it. (OMP_PLACES=cores is a trap here: with more threads
-# than cores it binds two spinning threads to one place, ~10x slower.)
+# More threads than hardware threads time-slice, so those numbers say
+# nothing about scaling.
+OVERSUB=""
+for t in $THREADS; do
+    [ "$t" -gt "$NPROC" ] && OVERSUB+="$t "
+done
+WARNING=""
+[ -z "$OVERSUB" ] || WARNING="WARNING: thread counts ${OVERSUB% } exceed the $NPROC hardware threads; those runs are oversubscribed and do not show scaling"
+[ -z "$WARNING" ] || echo "$WARNING" >&2
+
+# Pin one thread per physical core first. On a CPU with hyperthreading,
+# "threads" places with "spread" binding use one sibling per core up to the
+# core count (if the siblings are numbered 2k and 2k+1, as on the laptop this
+# was tuned on) and both siblings beyond it; check `lscpu -e` for the
+# numbering on another machine. If the highest thread count does not exceed
+# the number of physical cores, OMP_PLACES=cores OMP_PROC_BIND=spread (set
+# through the environment overrides) gives one thread per core. With more
+# threads than cores, OMP_PLACES=cores is a trap: it binds two spinning
+# threads to one place, ~10x slower.
 # The default OMP_WAIT_POLICY (spin briefly, then sleep) is kept: it was
 # fastest; "passive" was ~4x slower on email-Enron.
 export OMP_PLACES=${OMP_PLACES:-threads}
@@ -91,6 +101,7 @@ echo "variant,graph,vertices,edges,threads,iters,repeats,median_s_per_iter,min_s
     echo "commit:      $(git rev-parse --short HEAD 2>/dev/null || echo unknown)$(git diff --quiet 2>/dev/null || echo ' (+ uncommitted changes)')"
     echo "cpu:         $(lscpu | sed -n 's/^Model name: *//p')"
     echo "cores:       $(lscpu | sed -n 's/^Core(s) per socket: *//p') physical x $(lscpu | sed -n 's/^Socket(s): *//p') socket(s), $NPROC hardware threads"
+    [ -z "$WARNING" ] || echo "$WARNING"
     echo "kernel:      $(uname -r)"
     echo "compiler:    $(${CXX:-g++} --version | head -1)"
     echo "flags:       -std=c++17 -O3 -march=native -fopenmp"
