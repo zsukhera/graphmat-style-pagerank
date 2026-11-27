@@ -45,3 +45,6 @@ venv/
 # ---- Benchmark results ----
 # Uncomment if raw results should stay local; keep them tracked if they feed the report.
 # results/
+
+# ---- Local credentials (never commit) ----
+CLAUDE.md

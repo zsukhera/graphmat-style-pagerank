@@ -1,0 +1,14 @@
+=== rebuild
+(clean build)
+=== load before bench: 0.08 0.76 4.05 1/1708 3635077
+=== step 5: make bench
+bench rc=0
+=== load after bench: 2.05 1.84 3.14 1/1698 3637496
+=== step 6: perf
+[sudo: authenticate] Password: 
+kernel.perf_event_paranoid = 1
+perf rc=0
+kernel.perf_event_paranoid = 4
+perf_event_paranoid restored to 4
+=== load at end: 1.14 1.48 2.78 2/1705 3638169
+FINAL_DONE

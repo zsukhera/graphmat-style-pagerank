@@ -1,0 +1,34 @@
+K sweep: 16 threads, -i 20 -e 0 -r 10, OMP_PLACES=cores OMP_PROC_BIND=close
+load at start: 0.00 1.80 6.79 2/1706 3633458
+== soc-LiveJournal1
+dynamic   K=1   time/iter:   0.034304
+combined  K=1   time/iter:   0.033530
+dynamic   K=2   time/iter:   0.024903
+combined  K=2   time/iter:   0.026411
+dynamic   K=4   time/iter:   0.020603
+combined  K=4   time/iter:   0.021946
+dynamic   K=8   time/iter:   0.021490
+combined  K=8   time/iter:   0.019320
+dynamic   K=16  time/iter:   0.018134
+combined  K=16  time/iter:   0.017858
+dynamic   K=32  time/iter:   0.018032
+combined  K=32  time/iter:   0.017678
+dynamic   K=64  time/iter:   0.017650
+combined  K=64  time/iter:   0.017585
+== email-Enron
+dynamic   K=1   time/iter:   0.000156
+combined  K=1   time/iter:   0.000811
+dynamic   K=2   time/iter:   0.000125
+combined  K=2   time/iter:   0.000755
+dynamic   K=4   time/iter:   0.000094
+combined  K=4   time/iter:   0.000614
+dynamic   K=8   time/iter:   0.000095
+combined  K=8   time/iter:   0.000248
+dynamic   K=16  time/iter:   0.000103
+combined  K=16  time/iter:   0.000178
+dynamic   K=32  time/iter:   0.000084
+combined  K=32  time/iter:   0.000138
+dynamic   K=64  time/iter:   0.000087
+combined  K=64  time/iter:   0.000112
+load at end: 7.17 3.63 6.77 1/1697 3634084
+KSWEEP_DONE

@@ -1,0 +1,13 @@
+n = 4847571  edges = 68993773 (deduplicated)  max in-degree = 13906
+T =  2  max/mean = 1.692
+T =  4  max/mean = 2.516
+T =  8  max/mean = 3.317
+T = 16  max/mean = 4.094
+n = 4847571  edges = 68993773 (deduplicated)
+sigma =      4 (no sort)  slots =    138341040  slots/edges = 2.005
+sigma =             1024  slots =     71155364  slots/edges = 1.031
+sigma =             4096  slots =     69864000  slots/edges = 1.013
+sigma =            16384  slots =     69335568  slots/edges = 1.005
+sigma =            65536  slots =     69128528  slots/edges = 1.002
+sigma =           262144  slots =     69049896  slots/edges = 1.001
+sigma =    n (full sort)  slots =     69017484  slots/edges = 1.000

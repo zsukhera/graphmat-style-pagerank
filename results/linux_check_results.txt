@@ -1,0 +1,232 @@
+GraphMat-style PageRank: experiment results (IMPLEMENTATION_PLAN.md steps 1-7)
+==============================================================================
+date:     2026-11-27
+code:     commit 44fb288 (main) + uncommitted changes listed in "Code changes" below
+machine:  gpu-lab-Precision-3680 (lab machine; ask the group for access), see step 2
+files:    results/benchmarks.txt / .csv    step 5, full tables (raw output of run_bench.sh)
+          results/perf.csv                 step 6
+          results/speedup-<graph>.png      step 7
+
+Status
+------
+1. Linux check ............ DONE: on WSL2 (GCC 13.3) and on the benchmark machine (GCC 15.2)
+2. Benchmark machine ...... DONE: inspected, toolchain installed, pinning chosen (hybrid CPU!)
+3. Data ................... DONE: 3 graphs; imbalance ratios and ELLPACK padding measured
+4. Choose K ............... DONE: K = 32 (set as default in src/driver.h)
+5. Final benchmarks ....... DONE: 5 variants x threads 1,2,4,8,16 x 3 graphs, idle machine
+6. perf profiling ......... DONE: soc-LiveJournal1, threads 1 and 16 (after fixing run_perf.sh)
+7. Plots .................. DONE
+8. Report / README ........ NOT DONE (writing, not experiments)
+
+
+Code changes made (uncommitted, in the local working tree)
+----------------------------------------------------------
+- Makefile: DEBUGFLAGS gained -march=native. Without it `make debug` failed:
+  pagerank_combined.cpp/pagerank_simd.cpp `#error "... needs AVX2"`.
+- src/driver.h: default -p K changed 8 -> 32 (step 4); comment updated ("dynamic and
+  combined" use it).
+- bench/run_perf.sh: `perf stat --no-scale`. On this hybrid CPU perf scaled E-core
+  counts up from a few ms of running time into billions of phantom events (first run
+  showed 16-thread instruction counts at ~half the 1-thread counts). Fixed run gives
+  identical instructions/iteration at 1 and 16 threads, as it must.
+- tools/sell_padding.py: new; reports ELLPACK stored slots / edges for several sigma
+  (asked for in plan step 3). Reproduces sell.h's quoted rmat-20 numbers exactly.
+- .gitignore: CLAUDE.md (it holds the machine password).
+
+
+STEP 1: Linux check
+-------------------
+                                   WSL2 (8 vCPU)          benchmark machine
+compiler                           g++ 13.3.0             g++ 15.2.0 (Ubuntu 26.04 default;
+                                                          GCC 13 not packaged)
+make: warnings                     0                      0
+vgather in ell_scalar / simd /     0 / 1 / -              0 / 1 / 1
+  combined                         (control stays scalar on both compilers)
+make debug (after Makefile fix)    0 warnings             0 warnings
+ASan+UBSan, -t 3, all 6 variants
+  on tiny, edge_cases, rmat-10,    clean                  clean
+  email-Enron
+make test (small graphs+Enron)     132 passed, 0 failed   passed, 0 failed
+make test incl. soc-LiveJournal1   147 passed, 0 failed   -
+  (LJ vs serial, t=1,3,16: L1 <= 6.6e-15 for every variant)
+bench/run_bench.sh smoke test      works (real bc/lscpu)  works
+
+
+STEP 2: Benchmark machine
+-------------------------
+OS / kernel:  Ubuntu 26.04.1 LTS, 7.0.0-43-generic
+CPU:          Intel Core i7-14700 (Raptor Lake, HYBRID), 1 socket, 1 NUMA node, AVX2
+              8 P-cores with HT (CPUs 0-15, up to 5.3-5.4 GHz)
+              12 E-cores, no HT (CPUs 16-27, up to 4.2 GHz)
+              20 physical cores, 28 hardware threads; L2 28 MiB, L3 33 MiB
+RAM:          30 GiB
+Downfall:     gather_data_sampling = "Not affected" (gathers run at full speed)
+Toolchain:    build-essential installed with sudo (g++ 15.2, make 4.4.1)
+perf:         7.0.14; kernel.perf_event_paranoid was 4, set to 1 only while profiling,
+              restored to 4 afterwards.
+Pinning:      OMP_PLACES=cores OMP_PROC_BIND=close
+              -> places {0,1},{2,3},...,{14,15} (P-cores) then {16},{17},... (E-cores)
+              -> threads 1-8 = one per P-core; threads 9-16 = E-cores 16-23.
+              One thread per physical core, as the plan asks. The machine does not have
+              16 identical cores, so at 16 threads half the threads run on cores ~20-40%
+              slower. schedule(static) gives every thread equal work, so the slowest
+              (E-core) threads set the pace; dynamic scheduling absorbs this. THIS MUST BE
+              STATED IN THE REPORT: part of the 16-thread static-vs-dynamic gap is core
+              heterogeneity, not graph skew (clearest on rmat-20, below).
+Idle:         another user's ML job (same account) occupied the CPUs from 14:54 to ~15:30;
+              every timed run was gated on 3 consecutive idle minutes (load < 1.5, no
+              process > 20% CPU). Load at bench start: 0.08.
+
+
+STEP 3: Data
+------------
+graph              vertices     edges (dedup)  max in-deg  source
+email-Enron          36,692        367,662         1,383   SNAP
+rmat-20           1,048,576     16,087,413        39,547   tools/gen_rmat.py --scale 20 (seed 1)
+soc-LiveJournal1  4,847,571     68,993,773        13,906   SNAP
+
+Load imbalance under schedule(static) (tools/edge_balance.py):
+heaviest block's edges / mean edges per block (1.000 = even)
+graph              T=2    T=4    T=8    T=16
+email-Enron       1.667  2.802  4.342  6.507
+rmat-20           1.008  1.028  1.058  1.070
+soc-LiveJournal1  1.692  2.516  3.317  4.094
+-> Both real graphs are strongly skewed by id order; rmat-20 (ids permuted) is not.
+
+ELLPACK padding, stored slots / edges (tools/sell_padding.py), SELL-4-sigma:
+sigma               email-Enron  rmat-20  soc-LiveJournal1
+4 (no sort)            2.180      3.597       2.005
+1024                   1.036      1.384       1.031
+4096                   1.018      1.178       1.013
+16384 (chosen)         1.007      1.074       1.005
+65536                  1.006      1.032       1.002
+n (full sort)          1.006      1.007       1.000
+-> sigma = 16,384 is fine on all three graphs (<= 7.4% padding). Keep it.
+
+
+STEP 4: K (partitions per thread), 16 threads, -i 20 -e 0 -r 10, median ms/iteration
+-------------------------------------------------------------------------------------
+          soc-LiveJournal1        email-Enron
+K       dynamic  combined     dynamic  combined
+1        34.30    33.53         0.156    0.811
+2        24.90    26.41         0.125    0.755
+4        20.60    21.95         0.094    0.614
+8        21.49    19.32         0.095    0.248
+16       18.13    17.86         0.103    0.178
+32       18.03    17.68         0.084    0.138
+64       17.65    17.59         0.087    0.112
+Chosen: K = 32. LiveJournal is flat from K = 16 (16/32/64 within 3%); on Enron K = 32 is
+best for dynamic and second-best for combined. The old default K = 8 was 10-20% slower on
+LJ and up to 2x slower on Enron (combined).
+
+
+STEP 5: Final benchmarks  (full tables with min-max: results/benchmarks.txt)
+---------------------------------------------------------------------------
+20 fixed iterations per run, median of 10 runs, iteration loop only. Speedup vs serial.
+median ms/iteration (speedup)
+
+email-Enron (serial 0.309 ms)
+thr  static         dynamic        ell_scalar     simd           combined
+ 1   0.312 (0.99)   0.335 (0.92)   0.135 (2.29)   0.123 (2.51)   0.124 (2.49)
+ 2   0.213 (1.45)   0.185 (1.67)   0.114 (2.71)   0.104 (2.97)   0.105 (2.94)
+ 4   0.143 (2.16)   0.112 (2.76)   0.097 (3.19)   0.089 (3.47)   0.076 (4.07)
+ 8   0.105 (2.94)   0.068 (4.54)   0.088 (3.51)   0.082 (3.77)   0.060 (5.15)
+16   0.101 (3.06)   0.081 (3.81)   0.098 (3.15)   0.091 (3.40)   0.140 (2.21)
+
+rmat-20 (serial 25.39 ms)
+thr  static         dynamic        ell_scalar     simd           combined
+ 1   25.53 (0.99)   26.38 (0.96)   21.51 (1.18)   21.81 (1.16)   21.10 (1.20)
+ 2   13.69 (1.85)   13.84 (1.83)   11.55 (2.20)   11.13 (2.28)   12.39 (2.05)
+ 4    7.20 (3.53)    7.27 (3.49)    6.01 (4.23)    5.74 (4.43)    6.64 (3.82)
+ 8    3.64 (6.97)    3.58 (7.10)    3.37 (7.53)    3.16 (8.03)    3.62 (7.02)
+16    4.33 (5.87)    2.84 (8.95)    4.51 (5.64)    4.42 (5.74)    3.15 (8.07)
+
+soc-LiveJournal1 (serial 112.24 ms)
+thr  static          dynamic         ell_scalar      simd            combined
+ 1   115.84 (0.97)   118.72 (0.95)   104.35 (1.08)    98.18 (1.14)    98.28 (1.14)
+ 2    94.35 (1.19)    68.97 (1.63)    86.13 (1.30)    79.70 (1.41)    55.33 (2.03)
+ 4    84.26 (1.33)    34.22 (3.28)    61.42 (1.83)    57.28 (1.96)    30.12 (3.73)
+ 8    44.39 (2.53)    20.33 (5.52)    40.78 (2.75)    38.48 (2.92)    18.45 (6.08)
+16    30.22 (3.71)    17.91 (6.27)    30.20 (3.72)    28.47 (3.94)    17.67 (6.35)
+
+The plan's four ratios (same thread count):
+                  load balancing     layout alone        SIMD alone         end to end
+                  static/dynamic     static/ell_scalar   ell_scalar/simd    serial/combined
+email-Enron
+   1                  0.93               2.31                1.10               2.49
+   2                  1.15               1.87                1.10               2.94
+   4                  1.28               1.47                1.09               4.07
+   8                  1.54               1.19                1.07               5.15
+  16                  1.25               1.03                1.08               2.21
+rmat-20
+   1                  0.97               1.19                0.99               1.20
+   2                  0.99               1.19                1.04               2.05
+   4                  0.99               1.20                1.05               3.82
+   8                  1.02               1.08                1.07               7.02
+  16                  1.53               0.96                1.02               8.07
+soc-LiveJournal1
+   1                  0.98               1.11                1.06               1.14
+   2                  1.37               1.10                1.08               2.03
+   4                  2.46               1.37                1.07               3.73
+   8                  2.18               1.09                1.06               6.08
+  16                  1.69               1.00                1.06               6.35
+
+Observations:
+- Load balancing is the biggest lever on the real graphs: dynamic beats static by up to
+  2.46x on LiveJournal and 1.54x on Enron, in line with their 2.5-6.5x static imbalance.
+- rmat-20 is balanced (1.07) and static ~= dynamic up to 8 threads (all P-cores). At 16
+  threads static drops to 5.87x while dynamic reaches 8.95x (ratio 1.53): that jump is the
+  E-cores, not the graph. Same reason ell_scalar/simd (static schedule) fall back at 16.
+- SIMD alone: -1% to +10% over the scalar ELLPACK control (typically 5-8%; rmat-20
+  at 1 thread is the one case where it is 1% slower). The layout
+  change gives more than SIMD at low thread counts (Enron 2.3x at 1 thread).
+- Best end to end: 8.95x (dynamic, rmat-20, 16 thr); combined 8.07x on rmat-20, 6.35x on
+  LiveJournal. Scaling flattens from 8 to 16 threads for every variant: P->E cores plus
+  memory bandwidth.
+- email-Enron at 16 threads is slower than at 8 for combined (0.14 vs 0.06 ms): an
+  iteration is ~0.1 ms, so fork/join and E-core stragglers dominate. Small-graph case.
+
+
+STEP 6: perf, soc-LiveJournal1, per PageRank iteration (results/perf.csv)
+-------------------------------------------------------------------------
+Method: bench/run_perf.sh, (count at 110 iters - count at 10 iters) / 100, --no-scale,
+events summed over P-core and E-core PMUs. cycle_activity.* exist only on P-cores, so at
+16 threads they cover the 8 P-core threads only. cycles are summed over all threads.
+
+variant     thr  instr (M)  cycles (M)  IPC    cache-refs (M)  cache-miss (M)  stalls_total (M)  stalls_l3_miss (M)
+serial       1    509.9       634.3     0.804      72.8           15.8             386.3              327.7
+static       1    500.2       575.2     0.870      70.4           12.7             331.0              256.0
+dynamic      1    509.2       582.1     0.875      70.6           12.3             333.1              253.9
+ell_scalar   1    340.5       542.7     0.627      84.3           12.5             342.6              259.2
+simd         1    250.3       513.1     0.488      82.3           12.4             353.7              275.5
+combined     1    250.0       513.0     0.487      82.8           12.5             354.4              274.8
+static      16    501.9      1019.8     0.492      44.6           11.6             471.9              435.8
+dynamic     16    511.1      1144.0     0.447      38.5           11.0             437.4              405.1
+ell_scalar  16    342.2      1021.5     0.335      52.5           12.1             509.4              466.8
+simd        16    251.7      1043.4     0.241      49.9           12.0             479.3              446.9
+combined    16    251.7      1135.0     0.222      43.8           11.3             484.7              461.8
+
+"Fewer instructions, fewer stalls"?
+- Fewer instructions: YES. ELLPACK cuts instructions 32% vs CSR (500 -> 341 M/iter), AVX2
+  a further 26% (341 -> 250 M). Total -50% vs static CSR.
+- Fewer stalls: NO. Stall cycles are flat (331-354 M at 1 thread) and ~75-80% of them are
+  L3-miss stalls. Cache misses are the same (~12.5 M/iter) for every non-serial variant. The kernel is
+  memory-latency bound; SIMD removes instructions, not misses, so time improves only
+  6-10% (cycles 543 -> 513 M) and IPC falls (0.63 -> 0.49).
+- At 16 threads total cycles roughly double vs 1 thread with identical instructions: the
+  threads spend cycles waiting on memory, and L3-miss stalls rise to ~90% of stalls.
+
+
+STEP 7: Plots
+-------------
+results/speedup-email-Enron.png, results/speedup-rmat-20.png,
+results/speedup-soc-LiveJournal1.png (tools/plot_bench.py on the CSV above)
+
+
+Still to do (not experiments)
+-----------------------------
+- Commit the changes above + results (and open PRs for the Makefile, driver.h K = 32 and
+  run_perf.sh fixes, as the plan asks).
+- Step 8: report and README (ratios, perf table, K and sigma sweeps, hybrid-CPU caveat).
+- Note for the report: the plan assumed GCC 13 on the benchmark machine; it used GCC 15.2
+  (GCC 13 verified separately on WSL2 for correctness and the vgather check only).

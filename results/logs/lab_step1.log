@@ -1,0 +1,56 @@
+=== compiler
+g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0
+=== make clean && make (warnings)
+(no warnings or errors)
+=== objdump vgather counts
+ell_scalar: 0
+simd:       1
+combined:   1
+=== make debug
+(no warnings or errors)
+=== ASan/UBSan runs, -t 3
+(sanitizer runs finished)
+=== make test
+132 passed, 0 failed
+=== bench script check
+kernel:      7.0.0-43-generic
+compiler:    g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0
+flags:       -std=c++17 -O3 -march=native -fopenmp
+OpenMP env:  OMP_PLACES=threads OMP_PROC_BIND=spread OMP_WAIT_POLICY=default
+method:      2 fixed iterations per run (-e 0), median of 1 runs;
+             time = PageRank iteration loop only (loading not timed)
+             speedup = serial median / variant median
+             min-max = fastest and slowest of the runs (shows noise)
+
+email-Enron  (36692 vertices, 367662 edges)
+--------------------------------------------------------------------------------
+variant    threads   median ms/it       min-max ms/it  speedup  efficiency
+serial           1          0.742         0.742-0.742     1.00           -
+combined         1          0.328         0.328-0.328     2.26        226%
+combined         2          0.261         0.261-0.261     2.84        142%
+combined         4          0.981         0.981-0.981     0.76         19%
+combined         8          5.135         5.135-5.135     0.14          2%
+combined        16          6.160         6.160-6.160     0.12          1%
+dynamic          1          0.683         0.683-0.683     1.09        109%
+dynamic          2          0.390         0.390-0.390     1.90         95%
+dynamic          4          3.029         3.029-3.029     0.24          6%
+dynamic          8          4.447         4.447-4.447     0.17          2%
+dynamic         16          8.120         8.120-8.120     0.09          1%
+ell_scalar       1          0.282         0.282-0.282     2.63        263%
+ell_scalar       2          0.338         0.338-0.338     2.20        110%
+ell_scalar       4          2.009         2.009-2.009     0.37          9%
+ell_scalar       8          4.132         4.132-4.132     0.18          2%
+ell_scalar      16          6.046         6.046-6.046     0.12          1%
+simd             1          0.325         0.325-0.325     2.28        228%
+simd             2          0.334         0.334-0.334     2.22        111%
+simd             4          3.057         3.057-3.057     0.24          6%
+simd             8          3.600         3.600-3.600     0.21          3%
+simd            16          6.502         6.502-6.502     0.11          1%
+static           1          0.666         0.666-0.666     1.11        111%
+static           2          0.498         0.498-0.498     1.49         74%
+static           4          0.851         0.851-0.851     0.87         22%
+static           8          3.948         3.948-3.948     0.19          2%
+static          16          7.449         7.449-7.449     0.10          1%
+
+written: /tmp/benchcheck.2184722/benchmarks.txt, /tmp/benchcheck.2184722/benchmarks.csv
+STEP1_DONE
