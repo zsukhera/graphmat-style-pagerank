@@ -13,6 +13,8 @@
 //   -e EPS          L1 convergence threshold (default 1e-10); 0 = always run
 //                   exactly -i iterations (fixed-work benchmarking)
 //   -d D            damping factor (default 0.85)
+//   -p K            partitions per thread, K >= 1 (default 8); used by the dynamic
+//                   variant only, the others ignore it
 #pragma once
 
 #include <algorithm>
@@ -36,6 +38,8 @@ struct PRParams {
                            // far below the 1e-6 tolerance of the NetworkX check
     int max_iters = 1000;  // safety cap; PageRank's error shrinks by about d
                            // per iteration, so 1e-10 needs ~150 iterations
+    int partitions = 8;    // partitions per thread for the dynamic variant;
+                           // provisional, to be set from a 16-core sweep
 };
 
 // Result of one PageRank run.
@@ -52,7 +56,8 @@ namespace driver_detail {
 
 [[noreturn]] inline void usage(const char* prog) {
     std::cerr << "usage: " << prog << " <graph-file> [-o ranks.txt] [-t threads]"
-                 " [-r repeats] [-i max-iters] [-e eps] [-d damping]\n";
+                 " [-r repeats] [-i max-iters] [-e eps] [-d damping]"
+                 " [-p partitions]\n";
     std::exit(1);
 }
 
@@ -127,6 +132,7 @@ inline int run_variant(int argc, char** argv, const char* name, PageRankFn fn,
         else if (!std::strcmp(a, "-i")) params.max_iters = static_cast<int>(parse_long(prog, next(), 1));
         else if (!std::strcmp(a, "-e")) params.eps = parse_double(prog, next());
         else if (!std::strcmp(a, "-d")) params.d = parse_double(prog, next());
+        else if (!std::strcmp(a, "-p")) params.partitions = static_cast<int>(parse_long(prog, next(), 1));
         else if (a[0] == '-' && a[1] != '\0') usage(prog);
         else if (graph_path.empty()) graph_path = a;
         else usage(prog);
