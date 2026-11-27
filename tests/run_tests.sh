@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # run_tests.sh — correctness harness for every PageRank variant in bin/.
 #
-# For each test graph, every variant is run and its ranks are checked:
+# For each test graph, every variant is run at each thread count and its
+# ranks are checked:
 #   1. against NetworkX's pagerank (graphs small enough for NetworkX), and
 #   2. against bin/pagerank_serial (every variant except serial itself),
 # each with the README's criterion: L1 distance below 1e-6.
@@ -10,12 +11,20 @@
 # data/soc-LiveJournal1.txt when they have been downloaded. LiveJournal is
 # too big for NetworkX, so it only gets the check against serial.
 #
+# Thread counts: 1, 3 and 16. Bugs in how vertices are split between threads
+# (block boundaries, remainders) show only at particular counts; 3 does not
+# divide the test graphs evenly, and 16 is the highest count the benchmarks use.
+#
 # Usage:  tests/run_tests.sh [variant ...]    (default: everything in bin/)
+# Environment override:
+#   THREADS="1 2 4"   thread counts   (default: 1 3 16)
 # Usually run via `make test`, which builds first.
 
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
+
+THREADS=${THREADS:-"1 3 16"}
 
 # Use the project's venv if it exists (setup.sh creates it).
 PYTHON=python3
@@ -55,8 +64,8 @@ pass=0
 fail=0
 
 # Prints one result line and updates the counters.
-report() {  # report <status> <variant> <graph> <check> <details>
-    printf '%-4s  %-22s %-28s %-8s %s\n' "$1" "$2" "$3" "$4" "$5"
+report() {  # report <status> <variant> <threads> <graph> <check> <details>
+    printf '%-4s  %-22s t=%-3s %-28s %-8s %s\n' "$1" "$2" "$3" "$4" "$5" "$6"
     if [ "$1" = PASS ]; then pass=$((pass + 1)); else fail=$((fail + 1)); fi
 }
 
@@ -69,39 +78,41 @@ for i in "${!GRAPHS[@]}"; do
     "$SERIAL" "$graph" -o "$ref" >/dev/null 2>"$OUT/err"
     rc=$?
     if [ $rc -ne 0 ]; then
-        report FAIL pagerank_serial "$gname" run "exit $rc: $(head -1 "$OUT/err")"
+        report FAIL pagerank_serial 1 "$gname" run "exit $rc: $(head -1 "$OUT/err")"
         continue
     fi
 
     for variant in "${VARIANTS[@]}"; do
-        vname=$(basename "$variant")
-        ranks="$OUT/$vname-$gname"
+        for t in $THREADS; do
+            vname=$(basename "$variant")
+            ranks="$OUT/$vname-$gname"
 
-        # Run the variant; a crash or non-zero exit is a failure.
-        if [ "$variant" = "$SERIAL" ]; then
-            cp "$ref" "$ranks"
-        else
-            "$variant" "$graph" -o "$ranks" >/dev/null 2>"$OUT/err"
-            rc=$?
-            if [ $rc -ne 0 ]; then
-                report FAIL "$vname" "$gname" run "exit $rc: $(head -1 "$OUT/err")"
-                continue
+            # Run the variant; a crash or non-zero exit is a failure.
+            if [ "$variant" = "$SERIAL" ]; then
+                cp "$ref" "$ranks"
+            else
+                "$variant" "$graph" -t "$t" -o "$ranks" >/dev/null 2>"$OUT/err"
+                rc=$?
+                if [ $rc -ne 0 ]; then
+                    report FAIL "$vname" "$t" "$gname" run "exit $rc: $(head -1 "$OUT/err")"
+                    continue
+                fi
             fi
-        fi
 
-        # Check 1: against NetworkX.
-        if [ "${NX_CHECK[$i]}" = 1 ]; then
-            if res=$("$PYTHON" tests/check_ranks.py --graph "$graph" --ranks "$ranks" 2>&1)
-            then status=PASS; else status=FAIL; fi
-            report "$status" "$vname" "$gname" networkx "${res#* }"
-        fi
+            # Check 1: against NetworkX.
+            if [ "${NX_CHECK[$i]}" = 1 ]; then
+                if res=$("$PYTHON" tests/check_ranks.py --graph "$graph" --ranks "$ranks" 2>&1)
+                then status=PASS; else status=FAIL; fi
+                report "$status" "$vname" "$t" "$gname" networkx "${res#* }"
+            fi
 
-        # Check 2: against serial (pointless for serial itself).
-        if [ "$variant" != "$SERIAL" ]; then
-            if res=$("$PYTHON" tests/check_ranks.py --ref "$ref" --ranks "$ranks" 2>&1)
-            then status=PASS; else status=FAIL; fi
-            report "$status" "$vname" "$gname" serial "${res#* }"
-        fi
+            # Check 2: against serial (pointless for serial itself).
+            if [ "$variant" != "$SERIAL" ]; then
+                if res=$("$PYTHON" tests/check_ranks.py --ref "$ref" --ranks "$ranks" 2>&1)
+                then status=PASS; else status=FAIL; fi
+                report "$status" "$vname" "$t" "$gname" serial "${res#* }"
+            fi
+        done
     done
 done
 
