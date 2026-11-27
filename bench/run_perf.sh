@@ -89,8 +89,22 @@ measure() {  # measure <binary> <threads> <iters>
     mv "$TMP/perf.out" "$TMP/counts.$3"
 }
 
-count() {  # count <iters> <event>: the raw value, or empty if perf did not report it
-    awk -F, -v e="$2" '$1 !~ /^#/ && $3 == e {print $1; exit}' "$TMP/counts.$1"
+# count <iters> <event>: the value, or empty if perf did not report it.
+# perf does not always print the requested name: user-only counting adds a
+# modifier ("instructions:u"), and hybrid CPUs print one line per PMU
+# ("cpu_core/instructions/", "cpu_atom/instructions/"), which are summed. A
+# non-numeric line counts only if no other matching line is numeric.
+count() {
+    awk -F, -v e="$2" '
+        function norm(s) {
+            sub(/^[A-Za-z0-9_]+\//, "", s); sub(/\/.*$/, "", s); sub(/:[A-Za-z]+$/, "", s)
+            return s
+        }
+        BEGIN {e = norm(e)}
+        $1 !~ /^#/ && norm($3) == e {
+            if ($1 ~ /^[0-9]+$/) {sum += $1; num = 1} else if (bad == "") bad = $1
+        }
+        END {if (num) printf "%.0f\n", sum; else print bad}' "$TMP/counts.$1"
 }
 
 field() { awk -v k="$1" 'index($0, k) == 1 {print $2; exit}' "$TMP/prog.out"; }
