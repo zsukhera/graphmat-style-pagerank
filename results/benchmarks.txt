@@ -1,15 +1,15 @@
 PageRank benchmarks
 ===================
 
-date:        2026-11-25 15:31:54 PKT
-commit:      e9e6a7f (+ uncommitted changes)
-cpu:         Intel(R) Core(TM) i7-10610U CPU @ 1.80GHz
-cores:       4 physical x 1 socket(s), 8 hardware threads
-kernel:      6.18.58.1-microsoft-standard-WSL2
-compiler:    g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+date:        2026-11-27 15:46:23 PKT
+commit:      44fb288 (+ uncommitted changes)
+cpu:         Intel(R) Core(TM) i7-14700
+cores:       20 physical x 1 socket(s), 28 hardware threads
+kernel:      7.0.0-43-generic
+compiler:    g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0
 flags:       -std=c++17 -O3 -march=native -fopenmp
-OpenMP env:  OMP_PLACES=threads OMP_PROC_BIND=spread OMP_WAIT_POLICY=default
-method:      20 fixed iterations per run (-e 0), median of 15 runs;
+OpenMP env:  OMP_PLACES=cores OMP_PROC_BIND=close OMP_WAIT_POLICY=default
+method:      20 fixed iterations per run (-e 0), median of 10 runs;
              time = PageRank iteration loop only (loading not timed)
              speedup = serial median / variant median
              min-max = fastest and slowest of the runs (shows noise)
@@ -17,75 +17,89 @@ method:      20 fixed iterations per run (-e 0), median of 15 runs;
 email-Enron  (36692 vertices, 367662 edges)
 --------------------------------------------------------------------------------
 variant    threads   median ms/it       min-max ms/it  speedup  efficiency
-serial           1          1.369         1.049-3.201     1.00           -
-static           1          1.313         0.999-3.227     1.04        104%
-static           2          0.828         0.733-2.786     1.65         83%
-static           4          0.721         0.520-3.296     1.90         47%
-static           8          0.765         0.609-3.141     1.79         22%
+serial           1          0.309         0.308-0.312     1.00           -
+combined         1          0.124         0.123-0.125     2.49        249%
+combined         2          0.105         0.103-0.112     2.94        147%
+combined         4          0.076         0.071-0.107     4.07        102%
+combined         8          0.060         0.057-0.099     5.15         64%
+combined        16          0.140         0.135-0.217     2.21         14%
+dynamic          1          0.335         0.334-0.340     0.92         92%
+dynamic          2          0.185         0.182-0.195     1.67         84%
+dynamic          4          0.112         0.107-0.114     2.76         69%
+dynamic          8          0.068         0.065-0.113     4.54         57%
+dynamic         16          0.081         0.076-0.122     3.81         24%
+ell_scalar       1          0.135         0.134-0.136     2.29        229%
+ell_scalar       2          0.114         0.113-0.118     2.71        136%
+ell_scalar       4          0.097         0.094-0.114     3.19         80%
+ell_scalar       8          0.088         0.083-0.134     3.51         44%
+ell_scalar      16          0.098         0.095-0.177     3.15         20%
+simd             1          0.123         0.123-0.127     2.51        251%
+simd             2          0.104         0.103-0.124     2.97        149%
+simd             4          0.089         0.085-0.116     3.47         87%
+simd             8          0.082         0.079-0.134     3.77         47%
+simd            16          0.091         0.088-0.148     3.40         21%
+static           1          0.312         0.311-0.314     0.99         99%
+static           2          0.213         0.213-0.236     1.45         73%
+static           4          0.143         0.142-0.168     2.16         54%
+static           8          0.105         0.103-0.127     2.94         37%
+static          16          0.101         0.100-0.150     3.06         19%
 
 rmat-20  (1048576 vertices, 16087413 edges)
 --------------------------------------------------------------------------------
 variant    threads   median ms/it       min-max ms/it  speedup  efficiency
-serial           1        196.074     182.812-206.367     1.00           -
-static           1        197.358     178.367-245.329     0.99         99%
-static           2        118.788     108.412-148.359     1.65         83%
-static           4         92.320      80.757-126.943     2.12         53%
-static           8         93.488      73.384-154.329     2.10         26%
+serial           1         25.392       24.890-25.701     1.00           -
+combined         1         21.104       21.009-21.895     1.20        120%
+combined         2         12.388       10.835-12.454     2.05        102%
+combined         4          6.643         5.919-6.768     3.82         96%
+combined         8          3.617         3.118-3.650     7.02         88%
+combined        16          3.146         3.107-3.168     8.07         50%
+dynamic          1         26.379       25.194-26.609     0.96         96%
+dynamic          2         13.839       13.269-13.993     1.83         92%
+dynamic          4          7.270         6.872-7.528     3.49         87%
+dynamic          8          3.578         3.524-3.685     7.10         89%
+dynamic         16          2.836         2.829-2.987     8.95         56%
+ell_scalar       1         21.507       21.285-22.998     1.18        118%
+ell_scalar       2         11.554       10.978-11.601     2.20        110%
+ell_scalar       4          6.009         5.780-6.078     4.23        106%
+ell_scalar       8          3.373         3.327-3.505     7.53         94%
+ell_scalar      16          4.505         4.436-4.605     5.64         35%
+simd             1         21.805       21.133-22.000     1.16        116%
+simd             2         11.134       10.987-11.460     2.28        114%
+simd             4          5.737         5.481-5.868     4.43        111%
+simd             8          3.161         3.137-3.305     8.03        100%
+simd            16          4.423         4.346-4.507     5.74         36%
+static           1         25.532       24.189-25.730     0.99         99%
+static           2         13.692       12.780-13.819     1.85         93%
+static           4          7.196         6.941-7.517     3.53         88%
+static           8          3.643         3.360-3.748     6.97         87%
+static          16          4.328         4.317-4.841     5.87         37%
 
-
-Notes (Stage 1, written after this run)
-=======================================
-
-Status
-- Variants benchmarked: serial (Stage 0) and static (Stage 1).
-- soc-LiveJournal1 is NOT included: the SNAP download stalled at ~5 KB/s and
-  stopped at 15 MB of ~250 MB. rmat-20 (tools/gen_rmat.py, Graph500
-  parameters, ids randomly permuted) stands in as the large power-law graph.
-- Benchmarking was stopped early: the per-thread edge-imbalance analysis
-  for static scheduling was started but not finished, so no imbalance
-  figures are reported here.
-
-Results
-- Best static speedup: 1.90x on email-Enron and 2.12x on rmat-20, both at
-  4 threads (4 physical cores). 8 threads (hyperthreads) gives no further
-  gain on either graph.
-- Static at 1 thread matches serial within noise (0.99x-1.04x), so the
-  parallel code adds no single-thread overhead.
-- Parallel efficiency at 4 threads: 47% (Enron), 53% (rmat-20).
-
-Noise: read the min-max column before trusting a median
-- This is a laptop CPU (turbo/thermal limits) under WSL2, with Windows
-  sharing the host. Max times are up to 2-3x the min (Enron serial:
-  1.05-3.20 ms/it), and repeated 2-thread rmat-20 runs ranged from 122 to
-  194 ms/it. Treat differences under ~15% as noise.
-- Run the final report numbers on native Linux, plugged in, idle.
-
-Measurement fixes made while benchmarking
-- Thread-pool startup was timed inside the first iteration (23 ms/it on a
-  6-vertex graph). driver.h now starts the pool before timing.
-- Serial used std::vector indexing and static used raw pointers, which made
-  1-thread static ~5% faster than serial and inflated every speedup.
-  Serial now uses the same raw-pointer code; the pragmas are the only
-  difference.
-- OMP_PLACES=cores with 8 threads pinned two spinning threads per place:
-  ~17 ms/it vs ~1.8 ms/it unpinned on Enron. The script uses
-  OMP_PLACES=threads OMP_PROC_BIND=spread (one thread per core up to 4).
-- OMP_WAIT_POLICY=passive was ~4x slower on Enron (3.7 vs 0.85 ms/it), so
-  the default policy is kept. This shows the cost of the 4 fork/join
-  regions per iteration in the static variant.
-
-Interpretation (hypotheses, not yet measured)
-- Enron: one iteration is ~1 ms, split across 4 parallel regions, so
-  fork/join and barrier overhead is a large fraction of the work.
-  Candidate fix: one parallel region per run, with omp for inside it.
-- rmat-20: the 8 MB contrib vector is gathered at random, so the SPMV is
-  likely memory-latency/bandwidth bound. That would cap scaling on this
-  dual-channel laptop regardless of scheduling.
-- Load imbalance: rmat-20's ids are randomly permuted, so equal vertex
-  blocks probably hold similar edge counts. Static imbalance may then
-  matter less there than on real graphs with clustered ids (Enron,
-  LiveJournal). Check with the edge-per-thread analysis before Stage 2.
-
-Reproduce
-  make data-rmat          # generate data/rmat-20.txt (~30 s)
-  make bench              # or: REPEATS=15 bench/run_bench.sh
+soc-LiveJournal1  (4847571 vertices, 68993773 edges)
+--------------------------------------------------------------------------------
+variant    threads   median ms/it       min-max ms/it  speedup  efficiency
+serial           1        112.240     111.484-112.643     1.00           -
+combined         1         98.284       97.496-98.810     1.14        114%
+combined         2         55.333       54.034-55.588     2.03        101%
+combined         4         30.124       30.018-30.338     3.73         93%
+combined         8         18.454       18.411-19.186     6.08         76%
+combined        16         17.671       17.602-17.736     6.35         40%
+dynamic          1        118.724     112.771-129.798     0.95         95%
+dynamic          2         68.972       62.165-77.248     1.63         81%
+dynamic          4         34.224       34.077-36.690     3.28         82%
+dynamic          8         20.327       19.901-21.507     5.52         69%
+dynamic         16         17.913       17.626-21.453     6.27         39%
+ell_scalar       1        104.353     103.992-105.118     1.08        108%
+ell_scalar       2         86.131       85.488-86.321     1.30         65%
+ell_scalar       4         61.421       61.142-62.093     1.83         46%
+ell_scalar       8         40.776       40.350-40.911     2.75         34%
+ell_scalar      16         30.198       30.055-30.538     3.72         23%
+simd             1         98.177       97.815-99.302     1.14        114%
+simd             2         79.703       79.359-79.991     1.41         70%
+simd             4         57.278       56.875-57.898     1.96         49%
+simd             8         38.475       38.258-38.865     2.92         36%
+simd            16         28.472       28.312-28.560     3.94         25%
+static           1        115.842     110.558-118.241     0.97         97%
+static           2         94.354      87.558-101.939     1.19         59%
+static           4         84.260       60.606-84.681     1.33         33%
+static           8         44.392       39.910-51.413     2.53         32%
+static          16         30.218       28.999-31.357     3.71         23%

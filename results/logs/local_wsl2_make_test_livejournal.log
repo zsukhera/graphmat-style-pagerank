@@ -1,0 +1,18 @@
+PASS pagerank_combined t=1 soc-LiveJournal1.txt serial L1 = 0.000e+00
+PASS pagerank_combined t=3 soc-LiveJournal1.txt serial L1 = 4.173e-15
+PASS pagerank_combined t=16 soc-LiveJournal1.txt serial L1 = 6.613e-15
+PASS pagerank_dynamic t=1 soc-LiveJournal1.txt serial L1 = 0.000e+00
+PASS pagerank_dynamic t=3 soc-LiveJournal1.txt serial L1 = 4.173e-15
+PASS pagerank_dynamic t=16 soc-LiveJournal1.txt serial L1 = 6.603e-15
+PASS pagerank_ell_scalar t=1 soc-LiveJournal1.txt serial L1 = 0.000e+00
+PASS pagerank_ell_scalar t=3 soc-LiveJournal1.txt serial L1 = 4.173e-15
+PASS pagerank_ell_scalar t=16 soc-LiveJournal1.txt serial L1 = 6.609e-15
+PASS pagerank_simd t=1 soc-LiveJournal1.txt serial L1 = 0.000e+00
+PASS pagerank_simd t=3 soc-LiveJournal1.txt serial L1 = 4.173e-15
+PASS pagerank_simd t=16 soc-LiveJournal1.txt serial L1 = 6.618e-15
+PASS pagerank_static t=1 soc-LiveJournal1.txt serial L1 = 0.000e+00
+PASS pagerank_static t=3 soc-LiveJournal1.txt serial L1 = 4.173e-15
+PASS pagerank_static t=16 soc-LiveJournal1.txt serial L1 = 6.604e-15
+147 passed, 0 failed    
+
+[exited with code 0]

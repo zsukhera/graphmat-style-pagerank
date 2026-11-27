@@ -12,7 +12,7 @@
 
 CXX        ?= g++
 CXXFLAGS   ?= -std=c++17 -O3 -march=native -fopenmp -Wall -Wextra
-DEBUGFLAGS := -std=c++17 -O1 -g -fopenmp -Wall -Wextra \
+DEBUGFLAGS := -std=c++17 -O1 -g -march=native -fopenmp -Wall -Wextra \
               -fsanitize=address,undefined -fno-omit-frame-pointer
 LDFLAGS    ?=
 

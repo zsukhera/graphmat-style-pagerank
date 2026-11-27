@@ -82,8 +82,13 @@ IFS=, read -ra EVLIST <<< "$EVENTS"
 # perf stat -x, lines are "value,unit,event,run-time,pct-running[,...]"
 # (perf-stat(1), CSV FORMAT); lines starting with # are comments.
 # Runs one measurement; leaves the counts in $TMP/counts.<iters>.
+# --no-scale: on a hybrid CPU (P + E cores) each event is opened on both PMUs
+# and runs only while a thread is on that core type, so perf's default
+# scaling (count * enabled / running) extrapolates a few ms on an E-core into
+# billions of phantom events. Unscaled counts are what each core type really
+# did, and their sum is the process total.
 measure() {  # measure <binary> <threads> <iters>
-    perf stat -x, -o "$TMP/perf.out" -e "$EVENTS" -- \
+    perf stat --no-scale -x, -o "$TMP/perf.out" -e "$EVENTS" -- \
         "$1" "$GRAPH" -t "$2" -i "$3" -e 0 > "$TMP/prog.out" 2> "$TMP/prog.err" || {
         echo "error: $1 $GRAPH -t $2 -i $3 failed: $(tail -1 "$TMP/prog.err")" >&2; exit 1; }
     mv "$TMP/perf.out" "$TMP/counts.$3"

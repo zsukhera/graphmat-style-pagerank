@@ -13,8 +13,8 @@
 //   -e EPS          L1 convergence threshold (default 1e-10); 0 = always run
 //                   exactly -i iterations (fixed-work benchmarking)
 //   -d D            damping factor (default 0.85)
-//   -p K            partitions per thread, K >= 1 (default 8); used by the dynamic
-//                   variant only, the others ignore it
+//   -p K            partitions per thread, K >= 1 (default 32); used by the
+//                   dynamic and combined variants, the others ignore it
 #pragma once
 
 #include <algorithm>
@@ -38,8 +38,10 @@ struct PRParams {
                            // far below the 1e-6 tolerance of the NetworkX check
     int max_iters = 1000;  // safety cap; PageRank's error shrinks by about d
                            // per iteration, so 1e-10 needs ~150 iterations
-    int partitions = 8;    // partitions per thread for the dynamic variant;
-                           // provisional, to be set from a 16-core sweep
+    int partitions = 32;   // partitions per thread (dynamic, combined); chosen
+                           // by a K = 1..64 sweep at 16 threads on an i7-14700:
+                           // flat from K = 16 on soc-LiveJournal1, best or
+                           // near-best at 32 on email-Enron
 };
 
 // Result of one PageRank run.

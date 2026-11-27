@@ -1,0 +1,8 @@
+load before: 0.05 0.43 1.83 2/1707 3639129
+[sudo: authenticate] Password: 
+kernel.perf_event_paranoid = 1
+perf rc=0
+kernel.perf_event_paranoid = 4
+paranoid now 4
+load after: 1.02 0.71 1.70 2/1702 3639813
+PERF_DONE
